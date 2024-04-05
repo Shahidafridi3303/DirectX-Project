@@ -34,3 +34,6 @@
 *.vsidx
 *.db
 *.opendb
+*.db-wal
+*.db-shm
+
