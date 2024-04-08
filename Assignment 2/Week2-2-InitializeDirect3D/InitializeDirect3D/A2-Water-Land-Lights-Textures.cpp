@@ -121,6 +121,7 @@ private:
 	void BuildFrameResources();
 	void BuildMaterials();
 	void BuildRenderItems();
+	void CreateItem(const char* item, XMMATRIX p, XMMATRIX q, XMMATRIX r, UINT ObjIndex, const char* material);
 	void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems);
 
 	// Texture Step2-2
@@ -175,9 +176,9 @@ private:
 	XMFLOAT4X4 mProj = MathHelper::Identity4x4();
 
 	// camera
-	float mTheta = 1.7f * XM_PI;
+	float mTheta = 1.5f * XM_PI;
 	float mPhi = XM_PIDIV2 - 0.3f;
-	float mRadius = 100.0f;
+	float mRadius = 200.0f;
 
 	POINT mLastMousePos;
 };
@@ -214,6 +215,39 @@ ShapesApp::~ShapesApp()
 {
 	if (md3dDevice != nullptr)
 		FlushCommandQueue();
+}
+//
+//// R Back Pillar
+//std::unique_ptr<RenderItem> rItem8;
+//rItem8 = std::make_unique<RenderItem>();
+//XMStoreFloat4x4(&rItem8->World, XMMatrixScaling(1.7f, 4.0f, 1.7f)* XMMatrixTranslation(1.0f, 5.5f, 18.0f));
+//// Texture
+//XMStoreFloat4x4(&rItem8->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
+//rItem8->ObjCBIndex = 288;
+//rItem8->Geo = mGeometries["shapeGeo"].get();
+//rItem8->Mat = mMaterials["four"].get();
+//rItem8->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+//rItem8->IndexCount = rItem8->Geo->DrawArgs["cylinder"].IndexCount;
+//rItem8->StartIndexLocation = rItem8->Geo->DrawArgs["cylinder"].StartIndexLocation;
+//rItem8->BaseVertexLocation = rItem8->Geo->DrawArgs["cylinder"].BaseVertexLocation;
+//mRitemLayer[(int)RenderLayer::Opaque].push_back(rItem8.get());
+//mAllRitems.push_back(std::move(rItem8));
+
+void ShapesApp::CreateItem(const char* item, XMMATRIX p, XMMATRIX q, XMMATRIX r, UINT ObjIndex, const char* material)
+{
+	auto RightWall = std::make_unique<RenderItem>();
+	XMStoreFloat4x4(&RightWall->World, p * q * r);
+	RightWall->ObjCBIndex = ObjIndex;
+	RightWall->Mat = mMaterials[material].get();// "Wood"
+	RightWall->Geo = mGeometries["shapeGeo"].get();
+
+	RightWall->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	RightWall->IndexCount = RightWall->Geo->DrawArgs[item].IndexCount;
+	RightWall->StartIndexLocation = RightWall->Geo->DrawArgs[item].StartIndexLocation;
+	RightWall->BaseVertexLocation = RightWall->Geo->DrawArgs[item].BaseVertexLocation;
+	//mAllRitems.push_back(std::move(RightWall));
+	mRitemLayer[(int)RenderLayer::Opaque].push_back(RightWall.get());
+	mAllRitems.push_back(std::move(RightWall));
 }
 
 bool ShapesApp::Initialize()
@@ -1579,7 +1613,7 @@ void ShapesApp::BuildRenderItems()
 {
 	// Base 1
 	auto boxRitem = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&boxRitem->World, XMMatrixScaling(120.0f, 0.4f, 120.0f) * XMMatrixTranslation(-10.0f, 0.4f, 5.0f));
+	XMStoreFloat4x4(&boxRitem->World, XMMatrixScaling(120.0f, 0.4f, 120.0f) * XMMatrixTranslation(35.0f, 0.4f, -40.0f));
 	// Texture
 	XMStoreFloat4x4(&boxRitem->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 	boxRitem->ObjCBIndex = 0;
@@ -1659,7 +1693,7 @@ void ShapesApp::BuildRenderItems()
 	XMStoreFloat4x4(&boxRitem4->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 	boxRitem4->ObjCBIndex = 139;
 	boxRitem4->Geo = mGeometries["shapeGeo"].get();
-	boxRitem4->Mat = mMaterials["six"].get();
+	boxRitem4->Mat = mMaterials["nine"].get();
 	boxRitem4->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	boxRitem4->IndexCount = boxRitem4->Geo->DrawArgs["box"].IndexCount;
 	boxRitem4->StartIndexLocation = boxRitem4->Geo->DrawArgs["box"].StartIndexLocation;
@@ -1962,66 +1996,213 @@ void ShapesApp::BuildRenderItems()
 	mRitemLayer[(int)RenderLayer::Transparent].push_back(wavesRitem.get());
 	mAllRitems.push_back(std::move(wavesRitem));
 
-	// land
-	auto gridRitem = std::make_unique<RenderItem>();
-	gridRitem->World = MathHelper::Identity4x4();
-	XMStoreFloat4x4(&gridRitem->TexTransform, XMMatrixScaling(5.0f, 7.0f, 1.0f));
-	gridRitem->ObjCBIndex = 290;
-	gridRitem->Mat = mMaterials["three"].get();
-	gridRitem->Geo = mGeometries["landGeo"].get();
-	gridRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	gridRitem->IndexCount = gridRitem->Geo->DrawArgs["grid"].IndexCount;
-	gridRitem->StartIndexLocation = gridRitem->Geo->DrawArgs["grid"].StartIndexLocation;
-	gridRitem->BaseVertexLocation = gridRitem->Geo->DrawArgs["grid"].BaseVertexLocation;
-	mRitemLayer[(int)RenderLayer::Opaque].push_back(gridRitem.get());
-	mAllRitems.push_back(std::move(gridRitem));
+	//// land
+	//auto gridRitem = std::make_unique<RenderItem>();
+	//gridRitem->World = MathHelper::Identity4x4();
+	//XMStoreFloat4x4(&gridRitem->TexTransform, XMMatrixScaling(5.0f, 7.0f, 1.0f));
+	//gridRitem->ObjCBIndex = 290;
+	//gridRitem->Mat = mMaterials["three"].get();
+	//gridRitem->Geo = mGeometries["landGeo"].get();
+	//gridRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	//gridRitem->IndexCount = gridRitem->Geo->DrawArgs["grid"].IndexCount;
+	//gridRitem->StartIndexLocation = gridRitem->Geo->DrawArgs["grid"].StartIndexLocation;
+	//gridRitem->BaseVertexLocation = gridRitem->Geo->DrawArgs["grid"].BaseVertexLocation;
+	//mRitemLayer[(int)RenderLayer::Opaque].push_back(gridRitem.get());
+	//mAllRitems.push_back(std::move(gridRitem));
 
+	 /*//Experiment
+	auto boxRitem20 = std::make_unique<RenderItem>();
+	XMStoreFloat4x4(&boxRitem20->World, XMMatrixScaling(10.0f, 8.0f, 1.0f)* XMMatrixTranslation(85.0f, 4.25f, -95.0f));
+	 Texture
+	XMStoreFloat4x4(&boxRitem20->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
+	boxRitem20->ObjCBIndex = 290;
+	boxRitem20->Geo = mGeometries["shapeGeo"].get();
+	boxRitem20->Mat = mMaterials["one"].get();
+	boxRitem20->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	boxRitem20->IndexCount = boxRitem20->Geo->DrawArgs["box2"].IndexCount;
+	boxRitem20->StartIndexLocation = boxRitem20->Geo->DrawArgs["box2"].StartIndexLocation;
+	boxRitem20->BaseVertexLocation = boxRitem20->Geo->DrawArgs["box2"].BaseVertexLocation;
+	mRitemLayer[(int)RenderLayer::Opaque].push_back(boxRitem20.get());
+	mAllRitems.push_back(std::move(boxRitem20));*/
 
-	// cone
-	auto cone = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&cone->World, XMMatrixScaling(0.0f, 0.0f, 0.0f)* XMMatrixTranslation(0.0f, 8.0f, 5.0f));
-	// Texture
-	XMStoreFloat4x4(&cone->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
-	cone->ObjCBIndex = 291;
-	cone->Geo = mGeometries["shapeGeo"].get();
-	cone->Mat = mMaterials["two"].get();
-	cone->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	cone->IndexCount = cone->Geo->DrawArgs["cone"].IndexCount;
-	cone->StartIndexLocation = cone->Geo->DrawArgs["cone"].StartIndexLocation;
-	cone->BaseVertexLocation = cone->Geo->DrawArgs["cone"].BaseVertexLocation;
-	mRitemLayer[(int)RenderLayer::Opaque].push_back(cone.get());
-	mAllRitems.push_back(std::move(cone));
+	//// Top Base 1
+	//auto boxRitem35 = std::make_unique<RenderItem>();
+	//XMStoreFloat4x4(&boxRitem35->World, XMMatrixScaling(8.0f, 0.4f, 16.8f)* XMMatrixTranslation(-10.0f, 3.8f, 5.0f));
+	//// Texture
+	//XMStoreFloat4x4(&boxRitem35->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
+	//boxRitem35->ObjCBIndex = 290;
+	//boxRitem35->Geo = mGeometries["shapeGeo"].get();
+	//boxRitem35->Mat = mMaterials["nine"].get();
+	//boxRitem35->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	//boxRitem35->IndexCount = boxRitem35->Geo->DrawArgs["box"].IndexCount;
+	//boxRitem35->StartIndexLocation = boxRitem35->Geo->DrawArgs["box"].StartIndexLocation;
+	//boxRitem35->BaseVertexLocation = boxRitem35->Geo->DrawArgs["box"].BaseVertexLocation;
+	//mRitemLayer[(int)RenderLayer::Opaque].push_back(boxRitem35.get());
+	//mAllRitems.push_back(std::move(boxRitem35));
 
-	auto wedge = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&wedge->World, XMMatrixScaling(0.0f, 0.0f, 0.0f) * XMMatrixTranslation(-4.0f, 8.0f, 5.0f));
-	// Texture
-	XMStoreFloat4x4(&wedge->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
-	wedge->ObjCBIndex = 292;
-	wedge->Geo = mGeometries["shapeGeo"].get();
-	wedge->Mat = mMaterials["three"].get();
-	wedge->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	wedge->IndexCount = wedge->Geo->DrawArgs["wedge"].IndexCount;
-	wedge->StartIndexLocation = wedge->Geo->DrawArgs["wedge"].StartIndexLocation;
-	wedge->BaseVertexLocation = wedge->Geo->DrawArgs["wedge"].BaseVertexLocation;
-	mRitemLayer[(int)RenderLayer::Opaque].push_back(wedge.get());
-	mAllRitems.push_back(std::move(wedge));
+	objCBIndex = 290; //1
+	CreateItem("box2", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(85.0f, 4.25f, -95.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //1
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(75.0f, 4.25f, -95.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //2
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(85.0f, 4.25f, -85.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //3
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(80.0f, 4.25f, -80.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //4
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(70.0f, 4.25f, -90.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //5
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(65.0f, 4.25f, -85.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //6
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(65.0f, 4.25f, -95.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //7
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(55.0f, 4.25f, -95.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //8
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(45.0f, 4.25f, -95.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //9
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(35.0f, 4.25f, -95.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //10
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(25.0f, 4.25f, -95.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //11
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(55.0f, 4.25f, -75.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //12
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(45.0f, 4.25f, -85.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //13
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(35.0f, 4.25f, -85.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //14
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(25.0f, 4.25f, -85.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //15
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(45.0f, 4.25f, -75.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //16
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(50.0f, 4.25f, -80.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //17
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(15.0f, 4.25f, -95.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //18
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(20.0f, 4.25f, -90.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //19
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(10.0f, 4.25f, -90.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //20
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(10.0f, 4.25f, -80.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //21
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(90.0f, 4.25f, -80.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //22
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(90.0f, 4.25f, -70.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //23
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(90.0f, 4.25f, -60.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //24
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(90.0f, 4.25f, -50.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //25
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(90.0f, 4.25f, -40.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //26
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(90.0f, 4.25f, -30.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //27
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(90.0f, 4.25f, -20.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //28
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(70.0f, 4.25f, -70.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //29
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(30.0f, 4.25f, -70.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //30
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(10.0f, 4.25f, -70.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //31
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(10.0f, 4.25f, -60.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //32
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(10.0f, 4.25f, -50.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //33
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(10.0f, 4.25f, -40.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //34
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(10.0f, 4.25f, -30.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //35
+	//CreateItem("box", XMMatrixScaling(1.0f, 2.68f, 10.0f), XMMatrixTranslation(10.0f, 4.25f, -20.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	//objCBIndex++; //36
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(75.0f, 4.25f, -65.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //37
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(65.0f, 4.25f, -65.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //38
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(55.0f, 4.25f, -65.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //39
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(35.0f, 4.25f, -65.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //40
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(60.0f, 4.25f, -60.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //41
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(40.0f, 4.25f, -60.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //42
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(20.0f, 4.25f, -60.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //43
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(20.0f, 4.25f, -50.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //44
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(20.0f, 4.25f, -40.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //45
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(20.0f, 4.25f, -30.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //46
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(30.0f, 4.25f, -50.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //47
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(30.0f, 4.25f, -40.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //48
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(85.0f, 4.25f, -55.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //49
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(75.0f, 4.25f, -55.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //50
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(65.0f, 4.25f, -55.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //51
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(45.0f, 4.25f, -55.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //52
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(25.0f, 4.25f, -55.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //53
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(50.0f, 4.25f, -50.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //54
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(40.0f, 4.25f, -40.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //55
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(40.0f, 4.25f, -30.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //56
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(80.0f, 4.25f, -40.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //57
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(80.0f, 4.25f, -30.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //58
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(60.0f, 4.25f, -30.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //59
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(70.0f, 4.25f, -20.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //60
+	CreateItem("box", XMMatrixScaling(1.0f, 8.0f, 10.0f), XMMatrixTranslation(50.0f, 4.25f, -20.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //61
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(75.0f, 4.25f, -45.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //62
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(55.0f, 4.25f, -45.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //63
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(65.0f, 4.25f, -35.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //64
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(55.0f, 4.25f, -35.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //65
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(45.0f, 4.25f, -35.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //66
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(75.0f, 4.25f, -25.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //67
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(65.0f, 4.25f, -25.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //68
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(35.0f, 4.25f, -25.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //69
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(15.0f, 4.25f, -25.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //70
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(85.0f, 4.25f, -15.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //71
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(75.0f, 4.25f, -15.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //72
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(65.0f, 4.25f, -15.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //73
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(55.0f, 4.25f, -15.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //74
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(45.0f, 4.25f, -15.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //75
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(35.0f, 4.25f, -15.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //76
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(25.0f, 4.25f, -15.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //77
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(15.0f, 4.25f, -15.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //78
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(25.0f, 4.25f, -75.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //79
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(15.0f, 4.25f, -75.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	objCBIndex++; //80
 
-	auto diamond = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&diamond->World, XMMatrixScaling(0.0f, 0.0f, 0.0f) * XMMatrixTranslation(4.0f, 8.0f, 5.0f));
-	// Texture
-	XMStoreFloat4x4(&diamond->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
-	diamond->ObjCBIndex = 293;
-	diamond->Geo = mGeometries["shapeGeo"].get();
-	diamond->Mat = mMaterials["four"].get();
-	diamond->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	diamond->IndexCount = diamond->Geo->DrawArgs["cone"].IndexCount;
-	diamond->StartIndexLocation = diamond->Geo->DrawArgs["cone"].StartIndexLocation;
-	diamond->BaseVertexLocation = diamond->Geo->DrawArgs["cone"].BaseVertexLocation;
-	mRitemLayer[(int)RenderLayer::Opaque].push_back(diamond.get());
-	mAllRitems.push_back(std::move(diamond));
-
-
-	// All the render items are opaque.
+	// All the render items are opaque. 
 	// Tree Step28
 	/*for (auto& e : mAllRitems)
 		mOpaqueRitems.push_back(e.get());*/
