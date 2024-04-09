@@ -1,7 +1,7 @@
 ﻿  Camera.cpp
   A2-Water-Land-Lights-Textures.cpp
-D:\Documents\GBC Year 2 Semester 2\GAME3111---A3\Assignment 2\Week2-2-InitializeDirect3D\InitializeDirect3D\A2-Water-Land-Lights-Textures.cpp(1326,11): warning C4305: 'initializing': truncation from 'double' to 'float'
-D:\Documents\GBC Year 2 Semester 2\GAME3111---A3\Assignment 2\Week2-2-InitializeDirect3D\InitializeDirect3D\A2-Water-Land-Lights-Textures.cpp(1514,43): warning C4305: 'argument': truncation from 'double' to 'float'
-D:\Documents\GBC Year 2 Semester 2\GAME3111---A3\Assignment 2\Week2-2-InitializeDirect3D\InitializeDirect3D\A2-Water-Land-Lights-Textures.cpp(1643,102): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+C:\Users\Shahi\Desktop\GAME3111---A3\Assignment 2\Week2-2-InitializeDirect3D\InitializeDirect3D\A2-Water-Land-Lights-Textures.cpp(1326,11): warning C4305: 'initializing': truncation from 'double' to 'float'
+C:\Users\Shahi\Desktop\GAME3111---A3\Assignment 2\Week2-2-InitializeDirect3D\InitializeDirect3D\A2-Water-Land-Lights-Textures.cpp(1514,43): warning C4305: 'argument': truncation from 'double' to 'float'
+C:\Users\Shahi\Desktop\GAME3111---A3\Assignment 2\Week2-2-InitializeDirect3D\InitializeDirect3D\A2-Water-Land-Lights-Textures.cpp(1643,102): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
   Generating Code...
-  InitializeDirect3D.vcxproj -> D:\Documents\GBC Year 2 Semester 2\GAME3111---A3\Assignment 2\Week2-2-InitializeDirect3D\x64\Debug\InitializeDirect3D.exe
+  InitializeDirect3D.vcxproj -> C:\Users\Shahi\Desktop\GAME3111---A3\Assignment 2\Week2-2-InitializeDirect3D\x64\Debug\InitializeDirect3D.exe
