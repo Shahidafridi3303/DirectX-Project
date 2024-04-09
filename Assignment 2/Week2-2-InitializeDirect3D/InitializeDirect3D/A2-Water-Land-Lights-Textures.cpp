@@ -186,6 +186,8 @@ private:
 	Camera mCamera;
 
 	POINT mLastMousePos;
+
+	bool bStopForwardMovement;
 };
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
