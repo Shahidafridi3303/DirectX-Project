@@ -77,7 +77,7 @@ public:
 private:
 
 	// Camera coordinate system with coordinates relative to world space.
-	DirectX::XMFLOAT3 mPosition = { -10.0f, 10.0f, -20.0f };
+	DirectX::XMFLOAT3 mPosition = { 35.0f, 50.0f, -150.0f };
 	DirectX::XMFLOAT3 mRight = { 1.0f, 0.0f, 0.0f };
 	DirectX::XMFLOAT3 mUp = { 0.0f, 1.0f, 0.0f };
 	DirectX::XMFLOAT3 mLook = { 0.0f, 0.0f, 1.0f };
