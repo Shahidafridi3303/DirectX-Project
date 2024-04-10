@@ -25,7 +25,7 @@ public:
 	DirectX::XMFLOAT3 GetPosition3f()const;
 	void SetPosition(float x, float y, float z);
 	void SetPosition(const DirectX::XMFLOAT3& v);
-	
+
 	// Get camera basis vectors.
 	DirectX::XMVECTOR GetRight()const;
 	DirectX::XMFLOAT3 GetRight3f()const;
@@ -46,7 +46,7 @@ public:
 	float GetNearWindowHeight()const;
 	float GetFarWindowWidth()const;
 	float GetFarWindowHeight()const;
-	
+
 	// Set frustum.
 	void SetLens(float fovY, float aspect, float zn, float zf);
 
@@ -77,7 +77,7 @@ public:
 private:
 
 	// Camera coordinate system with coordinates relative to world space.
-	DirectX::XMFLOAT3 mPosition = { 35.0f, 50.0f, -150.0f };
+	DirectX::XMFLOAT3 mPosition = { 100.0f, 10.0f, -95.0f };
 	DirectX::XMFLOAT3 mRight = { 1.0f, 0.0f, 0.0f };
 	DirectX::XMFLOAT3 mUp = { 0.0f, 1.0f, 0.0f };
 	DirectX::XMFLOAT3 mLook = { 0.0f, 0.0f, 1.0f };
