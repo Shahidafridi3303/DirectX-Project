@@ -35,7 +35,7 @@ const int gNumFrameResources = 3;
 struct RenderItem
 {
 	RenderItem() = default;
-	RenderItem(const RenderItem& rhs) = delete;
+	//RenderItem(const RenderItem& rhs) = delete;
 
 	// World matrix of the shape that describes the object's local space
 	// relative to the world space, which defines the position, orientation,
@@ -135,6 +135,8 @@ private:
 
 	// Camera Collision Test with Maze Walls
 	void MazeCollision(int sx, int sy);
+
+	void SimpleCollision();
 	
 private:
 
@@ -193,7 +195,7 @@ private:
 
 	POINT mLastMousePos;
 
-	bool bStopForwardMovement;
+	bool bStopForwardMovement = false;
 	RenderItem* mPickedRitem = nullptr;
 };
 
@@ -237,7 +239,7 @@ void ShapesApp::CreateItem(const char* item, XMMATRIX p, XMMATRIX q, XMMATRIX r,
 	RightWall->ObjCBIndex = ObjIndex;
 	RightWall->Mat = mMaterials[material].get();// "Wood"
 	RightWall->Geo = mGeometries["shapeGeo"].get();
-	RightWall->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	RightWall->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_LINELIST;
 	RightWall->Bounds = RightWall->Geo->DrawArgs[item].Bounds;
 	RightWall->IndexCount = RightWall->Geo->DrawArgs[item].IndexCount;
 	RightWall->StartIndexLocation = RightWall->Geo->DrawArgs[item].StartIndexLocation;
@@ -278,6 +280,7 @@ bool ShapesApp::Initialize()
 	BuildRenderItems();
 	BuildFrameResources();
 	BuildPSOs();
+	//SimpleCollision();
 
 	// Execute the initialization commands.
 	ThrowIfFailed(mCommandList->Close());
@@ -308,7 +311,7 @@ void ShapesApp::Update(const GameTimer& gt)
 {
 	OnKeyboardInput(gt);
 	//UpdateCamera(gt);
-	//MazeCollision(mClientWidth /2, mClientHeight /2);
+	//MazeCollision(mClientWidth *0.5f, mClientHeight * 0.5f);
 
 	// Cycle through the circular frame resource array.
 	mCurrFrameResourceIndex = (mCurrFrameResourceIndex + 1) % gNumFrameResources;
@@ -324,11 +327,14 @@ void ShapesApp::Update(const GameTimer& gt)
 		CloseHandle(eventHandle);
 	}
 
+	
+
 	AnimateMaterials(gt);
 	UpdateObjectCBs(gt);
 	UpdateMaterialCBs(gt);
 	UpdateMainPassCB(gt);
 	UpdateWaves(gt);
+	SimpleCollision();
 }
 
 void ShapesApp::Draw(const GameTimer& gt)
@@ -422,7 +428,8 @@ void ShapesApp::OnMouseDown(WPARAM btnState, int x, int y)
 	else if ((btnState & MK_RBUTTON) != 0)
 	{
 		//step4
-		MazeCollision(x,y);
+		//MazeCollision(x,y);
+		SimpleCollision();
 	}
 }
 
@@ -477,31 +484,6 @@ void ShapesApp::OnKeyboardInput(const GameTimer& gt)
 
 	mCamera.UpdateViewMatrix();
 }
-
-//void ShapesApp::UpdateCamera(const GameTimer& gt)
-//{
-//	const float dt = gt.DeltaTime();
-//
-//	//GetAsyncKeyState returns a short (2 bytes)
-//	if (GetAsyncKeyState('W') & 0x8000) //most significant bit (MSB) is 1 when key is pressed (1000 000 000 000)
-//	{
-//		if (bStopForwardMovement == false)
-//		{
-//			mCamera.Walk(10.0f * dt);
-//		}
-//	}
-//
-//	if (GetAsyncKeyState('S') & 0x8000)
-//		mCamera.Walk(-10.0f * dt);
-//
-//	if (GetAsyncKeyState('A') & 0x8000)
-//		mCamera.Strafe(-10.0f * dt);
-//
-//	if (GetAsyncKeyState('D') & 0x8000)
-//		mCamera.Strafe(10.0f * dt);
-//
-//	mCamera.UpdateViewMatrix();
-//}
 
 void ShapesApp::AnimateMaterials(const GameTimer& gt)
 {
@@ -1151,12 +1133,12 @@ void ShapesApp::BuildShapeGeometry()
 	coneSubmesh.BaseVertexLocation = coneVertexOffset;
 
 	SubmeshGeometry wedgeSubmesh;
-	wedgeSubmesh.IndexCount = (UINT)cone.Indices32.size();
+	wedgeSubmesh.IndexCount = (UINT)wedge.Indices32.size();
 	wedgeSubmesh.StartIndexLocation = wedgeIndexOffset;
 	wedgeSubmesh.BaseVertexLocation = wedgeVertexOffset;
 
 	SubmeshGeometry diamondSubmesh;
-	diamondSubmesh.IndexCount = (UINT)cone.Indices32.size();
+	diamondSubmesh.IndexCount = (UINT)diamond.Indices32.size();
 	diamondSubmesh.StartIndexLocation = diamondIndexOffset;
 	diamondSubmesh.BaseVertexLocation = diamondVertexOffset;
 
@@ -1173,7 +1155,7 @@ void ShapesApp::BuildShapeGeometry()
 	// Geometry Step6
 	std::vector<Vertex> vertices(totalVertexCount);
 	UINT k = 0;
-	for (size_t i = 0; i < box.Vertices.size(); ++i, ++k)
+	for (UINT i = 0; i < box.Vertices.size(); ++i, ++k)
 	{
 		vertices[k].Pos = box.Vertices[i].Position;
 		vertices[k].Normal = box.Vertices[i].Normal;
@@ -1193,7 +1175,7 @@ void ShapesApp::BuildShapeGeometry()
 	XMFLOAT3 vMaxf3Box2(-MathHelper::Infinity, -MathHelper::Infinity, -MathHelper::Infinity);
 	XMVECTOR vMinBox2 = DirectX::XMLoadFloat3(&vMinf3Box2);
 	XMVECTOR vMaxBox2 = DirectX::XMLoadFloat3(&vMaxf3Box2);
-	for (size_t i = 0; i < box2.Vertices.size(); ++i, ++k)
+	for (UINT i = 0; i < box2.Vertices.size(); ++i, ++k)
 	{
 		vertices[k].Pos = box2.Vertices[i].Position;
 		vertices[k].Normal = box2.Vertices[i].Normal;
@@ -1212,7 +1194,7 @@ void ShapesApp::BuildShapeGeometry()
 	XMFLOAT3 vMaxf3Cylinder(-MathHelper::Infinity, -MathHelper::Infinity, -MathHelper::Infinity);
 	XMVECTOR vMinCylinder = DirectX::XMLoadFloat3(&vMinf3Cylinder);
 	XMVECTOR vMaxCylinder = DirectX::XMLoadFloat3(&vMaxf3Cylinder);
-	for (size_t i = 0; i < cylinder.Vertices.size(); ++i, ++k)
+	for (UINT i = 0; i < cylinder.Vertices.size(); ++i, ++k)
 	{
 		vertices[k].Pos = cylinder.Vertices[i].Position;
 		vertices[k].Normal = cylinder.Vertices[i].Normal;
@@ -1231,7 +1213,7 @@ void ShapesApp::BuildShapeGeometry()
 	XMFLOAT3 vMaxf3Cylinder2(-MathHelper::Infinity, -MathHelper::Infinity, -MathHelper::Infinity);
 	XMVECTOR vMinCylinder2 = DirectX::XMLoadFloat3(&vMinf3Cylinder2);
 	XMVECTOR vMaxCylinder2 = DirectX::XMLoadFloat3(&vMaxf3Cylinder2);
-	for (size_t i = 0; i < cylinder2.Vertices.size(); ++i, ++k)
+	for (UINT i = 0; i < cylinder2.Vertices.size(); ++i, ++k)
 	{
 		vertices[k].Pos = cylinder2.Vertices[i].Position;
 		vertices[k].Normal = cylinder2.Vertices[i].Normal;
@@ -1250,7 +1232,7 @@ void ShapesApp::BuildShapeGeometry()
 	XMFLOAT3 vMaxf3Cone(-MathHelper::Infinity, -MathHelper::Infinity, -MathHelper::Infinity);
 	XMVECTOR vMinCone = DirectX::XMLoadFloat3(&vMinf3Cone);
 	XMVECTOR vMaxCone = DirectX::XMLoadFloat3(&vMaxf3Cone);
-	for (size_t i = 0; i < cone.Vertices.size(); ++i, ++k)
+	for (UINT i = 0; i < cone.Vertices.size(); ++i, ++k)
 	{
 		vertices[k].Pos = cone.Vertices[i].Position;
 		vertices[k].Normal = cone.Vertices[i].Normal;
@@ -1269,7 +1251,7 @@ void ShapesApp::BuildShapeGeometry()
 	XMFLOAT3 vMaxf3Wedge(-MathHelper::Infinity, -MathHelper::Infinity, -MathHelper::Infinity);
 	XMVECTOR vMinWedge = DirectX::XMLoadFloat3(&vMinf3Wedge);
 	XMVECTOR vMaxWedge = DirectX::XMLoadFloat3(&vMaxf3Wedge);
-	for (size_t i = 0; i < wedge.Vertices.size(); ++i, ++k)
+	for (UINT i = 0; i < wedge.Vertices.size(); ++i, ++k)
 	{
 		vertices[k].Pos = wedge.Vertices[i].Position;
 		vertices[k].Normal = wedge.Vertices[i].Normal;
@@ -1288,7 +1270,7 @@ void ShapesApp::BuildShapeGeometry()
 	XMFLOAT3 vMaxf3Diamond(-MathHelper::Infinity, -MathHelper::Infinity, -MathHelper::Infinity);
 	XMVECTOR vMinDiamond = DirectX::XMLoadFloat3(&vMinf3Diamond);
 	XMVECTOR vMaxDiamond = DirectX::XMLoadFloat3(&vMaxf3Diamond);
-	for (size_t i = 0; i < diamond.Vertices.size(); ++i, ++k)
+	for (UINT i = 0; i < diamond.Vertices.size(); ++i, ++k)
 	{
 		vertices[k].Pos = diamond.Vertices[i].Position;
 		vertices[k].Normal = diamond.Vertices[i].Normal;
@@ -2370,7 +2352,7 @@ void ShapesApp::BuildRenderItems()
 	auto pickedRitem = std::make_unique<RenderItem>();
 	pickedRitem->World = MathHelper::Identity4x4();
 	pickedRitem->TexTransform = MathHelper::Identity4x4();
-	pickedRitem->ObjCBIndex = objCBIndex++;
+	pickedRitem->ObjCBIndex = ++objCBIndex;
 	pickedRitem->Mat = mMaterials["one"].get();
 	pickedRitem->Geo = mGeometries["shapeGeo"].get();
 	pickedRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
@@ -2611,6 +2593,37 @@ void ShapesApp::MazeCollision(int sx, int sy)
 			bStopForwardMovement = true;
 		}
 		else if (tmin >= 2.0f)
+		{
+			bStopForwardMovement = false;
+		}
+	}
+}
+
+void ShapesApp::SimpleCollision()
+{
+	/*BoundingBox cameraBounds;
+	cameraBounds.Center = mCamera.GetPosition3f();
+	cameraBounds.Extents = XMFLOAT3(mCamera.GetPosition3f().x + 2.0f, mCamera.GetPosition3f().y + 2.0f, mCamera.GetPosition3f().z + 2.0f);
+
+	for (UINT i = 0; i < mAllRitems.size(); i++)
+	{
+		auto item = mAllRitems[i].get();
+		auto result = cameraBounds.Intersects(item[i].Bounds);
+		if(result == true)
+		{
+			bStopForwardMovement = true;
+		}
+	}*/
+
+	auto items = mRitemLayer[(int)RenderLayer::Opaque];
+	for (auto renderItem : items)
+	{
+		float distance = 1.0f;
+		if (renderItem->Bounds.Intersects(mCamera.GetPosition(), mCamera.GetLook(), distance))
+		{
+			bStopForwardMovement = true;
+		}
+		else
 		{
 			bStopForwardMovement = false;
 		}
