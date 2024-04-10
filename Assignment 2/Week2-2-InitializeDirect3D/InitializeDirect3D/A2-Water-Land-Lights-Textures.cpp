@@ -943,7 +943,7 @@ void ShapesApp::BuildShadersAndInputLayout()
 void ShapesApp::BuildLandGeometry()
 {
 	GeometryGenerator geoGen;
-	GeometryGenerator::MeshData grid = geoGen.CreateGrid(100.0f, 160.0f, 50, 50);
+	GeometryGenerator::MeshData grid = geoGen.CreateGrid(50.0f, 190.0f, 100, 100);
 
 	//
 	// Extract the vertex elements we are interested and apply the height function to
@@ -952,7 +952,7 @@ void ShapesApp::BuildLandGeometry()
 	//
 
 	std::vector<Vertex> vertices(grid.Vertices.size());
-	for (size_t i = 0; i < grid.Vertices.size(); ++i)
+	for (size_t i = 1; i < grid.Vertices.size(); ++i)
 	{
 		auto& p = grid.Vertices[i].Position;
 		vertices[i].Pos = p;
@@ -1335,13 +1335,13 @@ void ShapesApp::BuildTreeSpritesGeometry()
 		XMFLOAT2 Size;
 	};
 
-	static const int treeCount = 45;
-	std::array<TreeSpriteVertex, 45> vertices;
+	static const int treeCount = 60;
+	std::array<TreeSpriteVertex, 60> vertices;
 	for (UINT i = 0; i < treeCount; ++i)
 	{
-		float x = MathHelper::RandF(-20.0f, 5.0f);
-		float y = 4.1;
-		float z = MathHelper::RandF(-95.0f, -17.0f);
+		float x = MathHelper::RandF(-25.0f, 85.0f);
+		float y = 4.2;
+		float z = MathHelper::RandF(-115.0f, -100.0f);
 
 
 		// Move flags slightly above.
@@ -1352,10 +1352,11 @@ void ShapesApp::BuildTreeSpritesGeometry()
 	}
 
 
-	std::array<std::uint16_t, 45> indices =
+	std::array<std::uint16_t, 60> indices =
 	{
 		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
-		21, 22, 23, 24, 25, 26, 27, 28, 29, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44
+		21, 22, 23, 24, 25, 26, 27, 28, 29, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+		41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54 ,55, 56, 57, 58, 59
 	};
 
 	const UINT vbByteSize = (UINT)vertices.size() * sizeof(TreeSpriteVertex);
