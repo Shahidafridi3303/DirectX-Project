@@ -1,0 +1,54 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Users\\khite\\OneDrive\\Desktop\\GAME3111---A3\\Assignment 2\\Week2-2-InitializeDirect3D\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{83D3C7A0-2C62-4D85-A13C-38689288E782}|InitializeDirect3D\\InitializeDirect3D.vcxproj|C:\\Users\\khite\\OneDrive\\Desktop\\GAME3111---A3\\Assignment 2\\Week2-2-InitializeDirect3D\\InitializeDirect3D\\A2-Water-Land-Lights-Textures.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{83D3C7A0-2C62-4D85-A13C-38689288E782}|InitializeDirect3D\\InitializeDirect3D.vcxproj|solutionrelative:InitializeDirect3D\\A2-Water-Land-Lights-Textures.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{83D3C7A0-2C62-4D85-A13C-38689288E782}|InitializeDirect3D\\InitializeDirect3D.vcxproj|C:\\Users\\khite\\OneDrive\\Desktop\\GAME3111---A3\\Assignment 2\\Week2-2-InitializeDirect3D\\InitializeDirect3D\\Shaders\\Default1.hlsl||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{83D3C7A0-2C62-4D85-A13C-38689288E782}|InitializeDirect3D\\InitializeDirect3D.vcxproj|solutionrelative:InitializeDirect3D\\Shaders\\Default1.hlsl||{8B382828-6202-11D1-8870-0000F87579D2}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 1,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "Default1.hlsl",
+              "DocumentMoniker": "C:\\Users\\khite\\OneDrive\\Desktop\\GAME3111---A3\\Assignment 2\\Week2-2-InitializeDirect3D\\InitializeDirect3D\\Shaders\\Default1.hlsl",
+              "RelativeDocumentMoniker": "InitializeDirect3D\\Shaders\\Default1.hlsl",
+              "ToolTip": "C:\\Users\\khite\\OneDrive\\Desktop\\GAME3111---A3\\Assignment 2\\Week2-2-InitializeDirect3D\\InitializeDirect3D\\Shaders\\Default1.hlsl",
+              "RelativeToolTip": "InitializeDirect3D\\Shaders\\Default1.hlsl",
+              "ViewState": "AQIAAAAAAAAAAAAAAAAAABEAAAAdAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002777|",
+              "WhenOpened": "2024-04-10T00:17:46.561Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "A2-Water-Land-Lights-Textures.cpp",
+              "DocumentMoniker": "C:\\Users\\khite\\OneDrive\\Desktop\\GAME3111---A3\\Assignment 2\\Week2-2-InitializeDirect3D\\InitializeDirect3D\\A2-Water-Land-Lights-Textures.cpp",
+              "RelativeDocumentMoniker": "InitializeDirect3D\\A2-Water-Land-Lights-Textures.cpp",
+              "ToolTip": "C:\\Users\\khite\\OneDrive\\Desktop\\GAME3111---A3\\Assignment 2\\Week2-2-InitializeDirect3D\\InitializeDirect3D\\A2-Water-Land-Lights-Textures.cpp*",
+              "RelativeToolTip": "InitializeDirect3D\\A2-Water-Land-Lights-Textures.cpp*",
+              "ViewState": "AQIAAEYCAAAAAAAAAAAAAGwCAAAwAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2024-04-09T23:50:45.481Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

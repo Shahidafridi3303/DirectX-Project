@@ -15,7 +15,7 @@
 #endif
 
 #ifndef NUM_SPOT_LIGHTS
-    #define NUM_SPOT_LIGHTS 6
+    #define NUM_SPOT_LIGHTS 7
 #endif
 
 // Include structures and functions for lighting.
