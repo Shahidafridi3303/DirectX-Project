@@ -13,14 +13,13 @@
  *  @author Hooman Salamat
  */
 
+#include "../../Common/Camera.h"
 #include "../../Common/d3dApp.h"
+#include "../../Common/GeometryGenerator.h"
 #include "../../Common/MathHelper.h"
 #include "../../Common/UploadBuffer.h"
-#include "../../Common/GeometryGenerator.h"
-#include "../../Common/Camera.h"
 #include "FrameResource.h"
 #include "Waves.h"
-#include "../../Common/Camera.h"
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
@@ -36,6 +35,7 @@ const int gNumFrameResources = 3;
 struct RenderItem
 {
 	RenderItem() = default;
+	RenderItem(const RenderItem& rhs) = delete;
 
 	// World matrix of the shape that describes the object's local space
 	// relative to the world space, which defines the position, orientation,
@@ -62,6 +62,10 @@ struct RenderItem
 	UINT IndexCount = 0;
 	UINT StartIndexLocation = 0;
 	int BaseVertexLocation = 0;
+
+	BoundingBox Bounds;
+	//step1: An invisible render-item will not be drawn.
+	bool Visible = true;
 };
 
 // Tree step14
@@ -71,6 +75,7 @@ enum class RenderLayer : int
 	Transparent,
 	AlphaTested,
 	AlphaTestedTreeSprites,
+	Highlight,
 	Count
 };
 
@@ -104,16 +109,13 @@ private:
 
 	// Texture Step1
 	void LoadTextures();
-
 	void BuildRootSignature();
 
 	// Texture Step2
 	void BuildDescriptorHeaps();
-
 	void BuildShadersAndInputLayout();
 	void BuildShapeGeometry();
 	void BuildLandGeometry();
-
 	void BuildSkullGeometry();
 
 	// Tree Step1
@@ -130,6 +132,10 @@ private:
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers();
 	float GetHillsHeight(float x, float z)const;
 	XMFLOAT3 GetHillsNormal(float x, float z)const;
+
+	// Camera Collision Test with Maze Walls
+	void MazeCollision(int sx, int sy);
+	
 private:
 
 	std::vector<std::unique_ptr<FrameResource>> mFrameResources;
@@ -188,6 +194,7 @@ private:
 	POINT mLastMousePos;
 
 	bool bStopForwardMovement;
+	RenderItem* mPickedRitem = nullptr;
 };
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
@@ -226,12 +233,12 @@ ShapesApp::~ShapesApp()
 void ShapesApp::CreateItem(const char* item, XMMATRIX p, XMMATRIX q, XMMATRIX r, UINT ObjIndex, const char* material)
 {
 	auto RightWall = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&RightWall->World, p * q * r);
+	DirectX::XMStoreFloat4x4(&RightWall->World, p * q * r);
 	RightWall->ObjCBIndex = ObjIndex;
 	RightWall->Mat = mMaterials[material].get();// "Wood"
 	RightWall->Geo = mGeometries["shapeGeo"].get();
-
 	RightWall->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	RightWall->Bounds = RightWall->Geo->DrawArgs[item].Bounds;
 	RightWall->IndexCount = RightWall->Geo->DrawArgs[item].IndexCount;
 	RightWall->StartIndexLocation = RightWall->Geo->DrawArgs[item].StartIndexLocation;
 	RightWall->BaseVertexLocation = RightWall->Geo->DrawArgs[item].BaseVertexLocation;
@@ -253,16 +260,13 @@ bool ShapesApp::Initialize()
 	mCbvSrvDescriptorSize = md3dDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
 	mWaves = std::make_unique<Waves>(128, 128, 1.0f, 0.03f, 4.0f, 0.2f);
+	
 
 	// Texture Step3
 	LoadTextures();
-
 	BuildRootSignature();
-
 	// Texture Step4
 	BuildDescriptorHeaps();
-
-
 	BuildShadersAndInputLayout();
 	BuildShapeGeometry();
 	BuildSkullGeometry();
@@ -303,7 +307,8 @@ void ShapesApp::OnResize()
 void ShapesApp::Update(const GameTimer& gt)
 {
 	OnKeyboardInput(gt);
-	UpdateCamera(gt);
+	//UpdateCamera(gt);
+	//MazeCollision(mClientWidth /2, mClientHeight /2);
 
 	// Cycle through the circular frame resource array.
 	mCurrFrameResourceIndex = (mCurrFrameResourceIndex + 1) % gNumFrameResources;
@@ -369,7 +374,7 @@ void ShapesApp::Draw(const GameTimer& gt)
 
 	auto passCB = mCurrFrameResource->PassCB->Resource();
 	mCommandList->SetGraphicsRootConstantBufferView(2, passCB->GetGPUVirtualAddress());
-
+	
 	// Tree step29
 	//DrawRenderItems(mCommandList.Get(), mOpaqueRitems);
 	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Opaque]);
@@ -378,6 +383,8 @@ void ShapesApp::Draw(const GameTimer& gt)
 	mCommandList->SetPipelineState(mPSOs["treeSprites"].Get());
 	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::AlphaTestedTreeSprites]);
 
+	mCommandList->SetPipelineState(mPSOs["highlight"].Get());
+	DrawRenderItems(mCommandList.Get(), mRitemLayer[(int)RenderLayer::Highlight]);
 
 	// Indicate a state transition on the resource usage.
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
@@ -405,10 +412,18 @@ void ShapesApp::Draw(const GameTimer& gt)
 
 void ShapesApp::OnMouseDown(WPARAM btnState, int x, int y)
 {
-	mLastMousePos.x = x;
-	mLastMousePos.y = y;
+	if ((btnState & MK_LBUTTON) != 0)
+	{
+		mLastMousePos.x = x;
+		mLastMousePos.y = y;
 
-	SetCapture(mhMainWnd);
+		SetCapture(mhMainWnd);
+	}
+	else if ((btnState & MK_RBUTTON) != 0)
+	{
+		//step4
+		MazeCollision(x,y);
+	}
 }
 
 void ShapesApp::OnMouseUp(WPARAM btnState, int x, int y)
@@ -440,19 +455,16 @@ void ShapesApp::OnMouseMove(WPARAM btnState, int x, int y)
 
 void ShapesApp::OnKeyboardInput(const GameTimer& gt)
 {
-	if (GetAsyncKeyState('1') & 0x8000)
-		mIsWireframe = true;
-	else
-		mIsWireframe = false;
-}
-
-void ShapesApp::UpdateCamera(const GameTimer& gt)
-{
 	const float dt = gt.DeltaTime();
 
 	//GetAsyncKeyState returns a short (2 bytes)
 	if (GetAsyncKeyState('W') & 0x8000) //most significant bit (MSB) is 1 when key is pressed (1000 000 000 000)
-		mCamera.Walk(10.0f * dt);
+	{
+		if (bStopForwardMovement == false)
+		{
+			mCamera.Walk(10.0f * dt);
+		}
+	}
 
 	if (GetAsyncKeyState('S') & 0x8000)
 		mCamera.Walk(-10.0f * dt);
@@ -465,6 +477,31 @@ void ShapesApp::UpdateCamera(const GameTimer& gt)
 
 	mCamera.UpdateViewMatrix();
 }
+
+//void ShapesApp::UpdateCamera(const GameTimer& gt)
+//{
+//	const float dt = gt.DeltaTime();
+//
+//	//GetAsyncKeyState returns a short (2 bytes)
+//	if (GetAsyncKeyState('W') & 0x8000) //most significant bit (MSB) is 1 when key is pressed (1000 000 000 000)
+//	{
+//		if (bStopForwardMovement == false)
+//		{
+//			mCamera.Walk(10.0f * dt);
+//		}
+//	}
+//
+//	if (GetAsyncKeyState('S') & 0x8000)
+//		mCamera.Walk(-10.0f * dt);
+//
+//	if (GetAsyncKeyState('A') & 0x8000)
+//		mCamera.Strafe(-10.0f * dt);
+//
+//	if (GetAsyncKeyState('D') & 0x8000)
+//		mCamera.Strafe(10.0f * dt);
+//
+//	mCamera.UpdateViewMatrix();
+//}
 
 void ShapesApp::AnimateMaterials(const GameTimer& gt)
 {
@@ -501,12 +538,12 @@ void ShapesApp::UpdateObjectCBs(const GameTimer& gt)
 		// This needs to be tracked per frame resource.
 		if (e->NumFramesDirty > 0)
 		{
-			XMMATRIX world = XMLoadFloat4x4(&e->World);
-			XMMATRIX texTransform = XMLoadFloat4x4(&e->TexTransform);
+			XMMATRIX world = DirectX::XMLoadFloat4x4(&e->World);
+			XMMATRIX texTransform = DirectX::XMLoadFloat4x4(&e->TexTransform);
 
 			ObjectConstants objConstants;
-			XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
-			XMStoreFloat4x4(&objConstants.TexTransform, XMMatrixTranspose(texTransform));
+			DirectX::XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
+			DirectX::XMStoreFloat4x4(&objConstants.TexTransform, XMMatrixTranspose(texTransform));
 
 			currObjectCB->CopyData(e->ObjCBIndex, objConstants);
 
@@ -526,13 +563,13 @@ void ShapesApp::UpdateMaterialCBs(const GameTimer& gt)
 		Material* mat = e.second.get();
 		if (mat->NumFramesDirty > 0)
 		{
-			XMMATRIX matTransform = XMLoadFloat4x4(&mat->MatTransform);
+			XMMATRIX matTransform = DirectX::XMLoadFloat4x4(&mat->MatTransform);
 
 			MaterialConstants matConstants;
 			matConstants.DiffuseAlbedo = mat->DiffuseAlbedo;
 			matConstants.FresnelR0 = mat->FresnelR0;
 			matConstants.Roughness = mat->Roughness;
-			XMStoreFloat4x4(&matConstants.MatTransform, XMMatrixTranspose(matTransform));
+			DirectX::XMStoreFloat4x4(&matConstants.MatTransform, XMMatrixTranspose(matTransform));
 
 			currMaterialCB->CopyData(mat->MatCBIndex, matConstants);
 
@@ -552,12 +589,12 @@ void ShapesApp::UpdateMainPassCB(const GameTimer& gt)
 	XMMATRIX invProj = XMMatrixInverse(&XMMatrixDeterminant(proj), proj);
 	XMMATRIX invViewProj = XMMatrixInverse(&XMMatrixDeterminant(viewProj), viewProj);
 
-	XMStoreFloat4x4(&mMainPassCB.View, XMMatrixTranspose(view));
-	XMStoreFloat4x4(&mMainPassCB.InvView, XMMatrixTranspose(invView));
-	XMStoreFloat4x4(&mMainPassCB.Proj, XMMatrixTranspose(proj));
-	XMStoreFloat4x4(&mMainPassCB.InvProj, XMMatrixTranspose(invProj));
-	XMStoreFloat4x4(&mMainPassCB.ViewProj, XMMatrixTranspose(viewProj));
-	XMStoreFloat4x4(&mMainPassCB.InvViewProj, XMMatrixTranspose(invViewProj));
+	DirectX::XMStoreFloat4x4(&mMainPassCB.View, XMMatrixTranspose(view));
+	DirectX::XMStoreFloat4x4(&mMainPassCB.InvView, XMMatrixTranspose(invView));
+	DirectX::XMStoreFloat4x4(&mMainPassCB.Proj, XMMatrixTranspose(proj));
+	DirectX::XMStoreFloat4x4(&mMainPassCB.InvProj, XMMatrixTranspose(invProj));
+	DirectX::XMStoreFloat4x4(&mMainPassCB.ViewProj, XMMatrixTranspose(viewProj));
+	DirectX::XMStoreFloat4x4(&mMainPassCB.InvViewProj, XMMatrixTranspose(invViewProj));
 	mMainPassCB.EyePosW = mCamera.GetPosition3f();
 	mMainPassCB.RenderTargetSize = XMFLOAT2((float)mClientWidth, (float)mClientHeight);
 	mMainPassCB.InvRenderTargetSize = XMFLOAT2(1.0f / mClientWidth, 1.0f / mClientHeight);
@@ -765,7 +802,6 @@ void ShapesApp::BuildRootSignature()
 	// Create root CBV.
 	// Textures Step9
 	slotRootParameter[0].InitAsDescriptorTable(1, &texTable, D3D12_SHADER_VISIBILITY_PIXEL);
-
 	slotRootParameter[1].InitAsConstantBufferView(0);
 	slotRootParameter[2].InitAsConstantBufferView(1);
 	slotRootParameter[3].InitAsConstantBufferView(2);
@@ -990,7 +1026,7 @@ void ShapesApp::BuildLandGeometry()
 
 	SubmeshGeometry submesh;
 	submesh.IndexCount = (UINT)indices.size();
-	submesh.StartIndexLocation = 8;
+	submesh.StartIndexLocation = 0;
 	submesh.BaseVertexLocation = 0;
 
 	geo->DrawArgs["grid"] = submesh;
@@ -1128,6 +1164,12 @@ void ShapesApp::BuildShapeGeometry()
 	// Geometry Step5
 	auto totalVertexCount = box.Vertices.size() + box2.Vertices.size() + cylinder.Vertices.size() + cylinder2.Vertices.size() + cone.Vertices.size() + wedge.Vertices.size() + diamond.Vertices.size();
 
+	// For Bounding  Box
+	XMFLOAT3 vMinf3(+MathHelper::Infinity, +MathHelper::Infinity, +MathHelper::Infinity);
+	XMFLOAT3 vMaxf3(-MathHelper::Infinity, -MathHelper::Infinity, -MathHelper::Infinity);
+	XMVECTOR vMin = DirectX::XMLoadFloat3(&vMinf3);
+	XMVECTOR vMax = DirectX::XMLoadFloat3(&vMaxf3);
+
 	// Geometry Step6
 	std::vector<Vertex> vertices(totalVertexCount);
 	UINT k = 0;
@@ -1137,51 +1179,129 @@ void ShapesApp::BuildShapeGeometry()
 		vertices[k].Normal = box.Vertices[i].Normal;
 		// Texture Step14
 		vertices[k].TexC = box.Vertices[i].TexC;
+
+		XMVECTOR P = DirectX::XMLoadFloat3(&vertices[i].Pos);
+		vMin = XMVectorMin(vMin, P);
+		vMax = XMVectorMax(vMax, P);
 	}
+	BoundingBox bounds;
+	DirectX::XMStoreFloat3(&bounds.Center, 0.5f * (vMin + vMax));
+	DirectX::XMStoreFloat3(&bounds.Extents, 0.5f * (vMax - vMin));
+	boxSubmesh.Bounds = bounds;
 
-
+	XMFLOAT3 vMinf3Box2(+MathHelper::Infinity, +MathHelper::Infinity, +MathHelper::Infinity);
+	XMFLOAT3 vMaxf3Box2(-MathHelper::Infinity, -MathHelper::Infinity, -MathHelper::Infinity);
+	XMVECTOR vMinBox2 = DirectX::XMLoadFloat3(&vMinf3Box2);
+	XMVECTOR vMaxBox2 = DirectX::XMLoadFloat3(&vMaxf3Box2);
 	for (size_t i = 0; i < box2.Vertices.size(); ++i, ++k)
 	{
 		vertices[k].Pos = box2.Vertices[i].Position;
 		vertices[k].Normal = box2.Vertices[i].Normal;
 		vertices[k].TexC = box2.Vertices[i].TexC;
-	}
 
+		XMVECTOR P = DirectX::XMLoadFloat3(&vertices[i].Pos);
+		vMinBox2 = XMVectorMin(vMinBox2, P);
+		vMaxBox2 = XMVectorMax(vMaxBox2, P);
+	}
+	BoundingBox boundsBox2;
+	DirectX::XMStoreFloat3(&boundsBox2.Center, 0.5f * (vMinBox2 + vMaxBox2));
+	DirectX::XMStoreFloat3(&boundsBox2.Extents, 0.5f * (vMaxBox2 - vMinBox2));
+	box2Submesh.Bounds = boundsBox2;
+
+	XMFLOAT3 vMinf3Cylinder(+MathHelper::Infinity, +MathHelper::Infinity, +MathHelper::Infinity);
+	XMFLOAT3 vMaxf3Cylinder(-MathHelper::Infinity, -MathHelper::Infinity, -MathHelper::Infinity);
+	XMVECTOR vMinCylinder = DirectX::XMLoadFloat3(&vMinf3Cylinder);
+	XMVECTOR vMaxCylinder = DirectX::XMLoadFloat3(&vMaxf3Cylinder);
 	for (size_t i = 0; i < cylinder.Vertices.size(); ++i, ++k)
 	{
 		vertices[k].Pos = cylinder.Vertices[i].Position;
 		vertices[k].Normal = cylinder.Vertices[i].Normal;
 		vertices[k].TexC = cylinder.Vertices[i].TexC;
-	}
 
+		XMVECTOR P = DirectX::XMLoadFloat3(&vertices[i].Pos);
+		vMinCylinder = XMVectorMin(vMinCylinder, P);
+		vMaxCylinder = XMVectorMax(vMaxCylinder, P);
+	}
+	BoundingBox boundsCylinder;
+	DirectX::XMStoreFloat3(&boundsCylinder.Center, 0.5f * (vMinCylinder + vMaxCylinder));
+	DirectX::XMStoreFloat3(&boundsCylinder.Extents, 0.5f * (vMaxCylinder - vMinCylinder));
+	cylinderSubmesh.Bounds = boundsCylinder;
+
+	XMFLOAT3 vMinf3Cylinder2(+MathHelper::Infinity, +MathHelper::Infinity, +MathHelper::Infinity);
+	XMFLOAT3 vMaxf3Cylinder2(-MathHelper::Infinity, -MathHelper::Infinity, -MathHelper::Infinity);
+	XMVECTOR vMinCylinder2 = DirectX::XMLoadFloat3(&vMinf3Cylinder2);
+	XMVECTOR vMaxCylinder2 = DirectX::XMLoadFloat3(&vMaxf3Cylinder2);
 	for (size_t i = 0; i < cylinder2.Vertices.size(); ++i, ++k)
 	{
 		vertices[k].Pos = cylinder2.Vertices[i].Position;
 		vertices[k].Normal = cylinder2.Vertices[i].Normal;
 		vertices[k].TexC = cylinder2.Vertices[i].TexC;
-	}
 
+		XMVECTOR P = DirectX::XMLoadFloat3(&vertices[i].Pos);
+		vMinCylinder2 = XMVectorMin(vMinCylinder2, P);
+		vMaxCylinder2 = XMVectorMax(vMaxCylinder2, P);
+	}
+	BoundingBox boundsCylinder2;
+	DirectX::XMStoreFloat3(&boundsCylinder2.Center, 0.5f * (vMinCylinder2 + vMaxCylinder2));
+	DirectX::XMStoreFloat3(&boundsCylinder2.Extents, 0.5f * (vMaxCylinder2 - vMinCylinder2));
+	cylinder2Submesh.Bounds = boundsCylinder2;
+
+	XMFLOAT3 vMinf3Cone(+MathHelper::Infinity, +MathHelper::Infinity, +MathHelper::Infinity);
+	XMFLOAT3 vMaxf3Cone(-MathHelper::Infinity, -MathHelper::Infinity, -MathHelper::Infinity);
+	XMVECTOR vMinCone = DirectX::XMLoadFloat3(&vMinf3Cone);
+	XMVECTOR vMaxCone = DirectX::XMLoadFloat3(&vMaxf3Cone);
 	for (size_t i = 0; i < cone.Vertices.size(); ++i, ++k)
 	{
 		vertices[k].Pos = cone.Vertices[i].Position;
 		vertices[k].Normal = cone.Vertices[i].Normal;
 		vertices[k].TexC = cone.Vertices[i].TexC;
-	}
 
+		XMVECTOR P = DirectX::XMLoadFloat3(&vertices[i].Pos);
+		vMinCone = XMVectorMin(vMinCone, P);
+		vMaxCone = XMVectorMax(vMaxCone, P);
+	}
+	BoundingBox boundsCone;
+	DirectX::XMStoreFloat3(&boundsCone.Center, 0.5f * (vMinCone + vMaxCone));
+	DirectX::XMStoreFloat3(&boundsCone.Extents, 0.5f * (vMaxCone - vMinCone));
+	coneSubmesh.Bounds = boundsCone;
+
+	XMFLOAT3 vMinf3Wedge(+MathHelper::Infinity, +MathHelper::Infinity, +MathHelper::Infinity);
+	XMFLOAT3 vMaxf3Wedge(-MathHelper::Infinity, -MathHelper::Infinity, -MathHelper::Infinity);
+	XMVECTOR vMinWedge = DirectX::XMLoadFloat3(&vMinf3Wedge);
+	XMVECTOR vMaxWedge = DirectX::XMLoadFloat3(&vMaxf3Wedge);
 	for (size_t i = 0; i < wedge.Vertices.size(); ++i, ++k)
 	{
 		vertices[k].Pos = wedge.Vertices[i].Position;
 		vertices[k].Normal = wedge.Vertices[i].Normal;
 		vertices[k].TexC = wedge.Vertices[i].TexC;
-	}
 
+		XMVECTOR P = DirectX::XMLoadFloat3(&vertices[i].Pos);
+		vMinWedge = XMVectorMin(vMinWedge, P);
+		vMaxWedge = XMVectorMax(vMaxWedge, P);
+	}
+	BoundingBox boundsWedge;
+	DirectX::XMStoreFloat3(&boundsWedge.Center, 0.5f * (vMinWedge + vMaxWedge));
+	DirectX::XMStoreFloat3(&boundsWedge.Extents, 0.5f * (vMaxWedge - vMinWedge));
+	wedgeSubmesh.Bounds = boundsWedge;
+
+	XMFLOAT3 vMinf3Diamond(+MathHelper::Infinity, +MathHelper::Infinity, +MathHelper::Infinity);
+	XMFLOAT3 vMaxf3Diamond(-MathHelper::Infinity, -MathHelper::Infinity, -MathHelper::Infinity);
+	XMVECTOR vMinDiamond = DirectX::XMLoadFloat3(&vMinf3Diamond);
+	XMVECTOR vMaxDiamond = DirectX::XMLoadFloat3(&vMaxf3Diamond);
 	for (size_t i = 0; i < diamond.Vertices.size(); ++i, ++k)
 	{
 		vertices[k].Pos = diamond.Vertices[i].Position;
 		vertices[k].Normal = diamond.Vertices[i].Normal;
 		vertices[k].TexC = diamond.Vertices[i].TexC;
-	}
 
+		XMVECTOR P = DirectX::XMLoadFloat3(&vertices[i].Pos);
+		vMinDiamond = XMVectorMin(vMinDiamond, P);
+		vMaxDiamond = XMVectorMax(vMaxDiamond, P);
+	}
+	BoundingBox boundsDiamond;
+	DirectX::XMStoreFloat3(&boundsDiamond.Center, 0.5f * (vMinDiamond + vMaxDiamond));
+	DirectX::XMStoreFloat3(&boundsDiamond.Extents, 0.5f * (vMaxDiamond - vMinDiamond));
+	diamondSubmesh.Bounds = boundsDiamond;
 
 	// Geometry Step7
 	std::vector<std::uint16_t> indices;
@@ -1223,9 +1343,9 @@ void ShapesApp::BuildShapeGeometry()
 	geo->DrawArgs["box2"] = box2Submesh;
 	geo->DrawArgs["cylinder"] = cylinderSubmesh;
 	geo->DrawArgs["cylinder2"] = cylinder2Submesh;
-	geo->DrawArgs["cone"] = cylinder2Submesh;
-	geo->DrawArgs["wedge"] = cylinder2Submesh;
-	geo->DrawArgs["diamond"] = cylinder2Submesh;
+	geo->DrawArgs["cone"] = coneSubmesh;
+	geo->DrawArgs["wedge"] = wedgeSubmesh;
+	geo->DrawArgs["diamond"] = diamondSubmesh;
 
 
 
@@ -1257,11 +1377,11 @@ void ShapesApp::BuildSkullGeometry()
 		fin >> vertices[i].Normal.x >> vertices[i].Normal.y >> vertices[i].Normal.z;
 
 		//step15: find uv mapping for skull model
-		XMVECTOR P = XMLoadFloat3(&vertices[i].Pos);
+		XMVECTOR P = DirectX::XMLoadFloat3(&vertices[i].Pos);
 
 		// Project point onto unit sphere and generate spherical texture coordinates.
 		XMFLOAT3 spherePos;
-		XMStoreFloat3(&spherePos, XMVector3Normalize(P));
+		DirectX::XMStoreFloat3(&spherePos, XMVector3Normalize(P));
 
 		float theta = atan2f(spherePos.z, spherePos.x);
 
@@ -1342,7 +1462,7 @@ void ShapesApp::BuildTreeSpritesGeometry()
 	for (UINT i = 0; i < treeCount; ++i)
 	{
 		float x = MathHelper::RandF(-20.0f, 5.0f);
-		float y = 4.1;
+		float y = 4.1f;
 		float z = MathHelper::RandF(-95.0f, -17.0f);
 
 
@@ -1414,7 +1534,7 @@ void ShapesApp::BuildPSOs()
 		mShaders["opaquePS"]->GetBufferSize()
 	};
 	opaquePsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-	opaquePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+	//opaquePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
 	opaquePsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 	opaquePsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
 	opaquePsoDesc.SampleMask = UINT_MAX;
@@ -1446,6 +1566,7 @@ void ShapesApp::BuildPSOs()
 	transparentPsoDesc.BlendState.RenderTarget[0] = transparencyBlendDesc;
 	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&transparentPsoDesc, IID_PPV_ARGS(&mPSOs["transparent"])));
 
+	
 
 	//
 	// PSO for opaque wireframe objects.
@@ -1488,7 +1609,18 @@ void ShapesApp::BuildPSOs()
 	treeSpritePsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
 
 	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&treeSpritePsoDesc, IID_PPV_ARGS(&mPSOs["treeSprites"])));
+	// PSO for highlight objects
+	//
 
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC highlightPsoDesc = opaquePsoDesc;
+
+	// Change the depth test from < to <= so that if we draw the same triangle twice, it will
+	// still pass the depth test.  This is needed because we redraw the picked triangle with a
+	// different material to highlight it.  If we do not use <=, the triangle will fail the 
+	// depth test the 2nd time we try and draw it.
+	highlightPsoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+	highlightPsoDesc.BlendState.RenderTarget[0] = transparencyBlendDesc;
+	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&highlightPsoDesc, IID_PPV_ARGS(&mPSOs["highlight"])));
 }
 
 void ShapesApp::BuildFrameResources()
@@ -1531,7 +1663,7 @@ void ShapesApp::BuildMaterials()
 	four->MatCBIndex = 3;
 	four->DiffuseSrvHeapIndex = 3;
 	four->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
-	four->FresnelR0 = XMFLOAT3(0.05f, 0.05f, 0.05);
+	four->FresnelR0 = XMFLOAT3(0.05f, 0.05f, 0.05f);
 	four->Roughness = 0.3f;
 
 	// Tree step30
@@ -1603,13 +1735,14 @@ void ShapesApp::BuildRenderItems()
 {
 	// Base 1
 	auto boxRitem = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&boxRitem->World, XMMatrixScaling(210.0f, 0.4f, 210.0f) * XMMatrixTranslation(35.0f, 0.4f, -40.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem->World, XMMatrixScaling(210.0f, 0.4f, 210.0f) * XMMatrixTranslation(35.0f, 0.4f, -40.0f));
 	// Texture
-	XMStoreFloat4x4(&boxRitem->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 	boxRitem->ObjCBIndex = 0;
 	boxRitem->Geo = mGeometries["shapeGeo"].get();
 	boxRitem->Mat = mMaterials["eight"].get();
 	boxRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	boxRitem->Bounds = boxRitem->Geo->DrawArgs["box"].Bounds;
 	boxRitem->IndexCount = boxRitem->Geo->DrawArgs["box"].IndexCount;
 	boxRitem->StartIndexLocation = boxRitem->Geo->DrawArgs["box"].StartIndexLocation;
 	boxRitem->BaseVertexLocation = boxRitem->Geo->DrawArgs["box"].BaseVertexLocation;
@@ -1619,13 +1752,14 @@ void ShapesApp::BuildRenderItems()
 
 	// Base 2
 	auto boxRitem2 = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&boxRitem2->World, XMMatrixScaling(8.5f, 0.4f, 17.5f) * XMMatrixTranslation(-10.0f, 0.0f, 5.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem2->World, XMMatrixScaling(8.5f, 0.4f, 17.5f) * XMMatrixTranslation(-10.0f, 0.0f, 5.0f));
 	// Texture
-	XMStoreFloat4x4(&boxRitem2->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem2->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 	boxRitem2->ObjCBIndex = 1;
 	boxRitem2->Geo = mGeometries["shapeGeo"].get();
 	boxRitem2->Mat = mMaterials["two"].get();
 	boxRitem2->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	boxRitem2->Bounds = boxRitem2->Geo->DrawArgs["box2"].Bounds;
 	boxRitem2->IndexCount = boxRitem2->Geo->DrawArgs["box2"].IndexCount;
 	boxRitem2->StartIndexLocation = boxRitem2->Geo->DrawArgs["box2"].StartIndexLocation;
 	boxRitem2->BaseVertexLocation = boxRitem2->Geo->DrawArgs["box2"].BaseVertexLocation;
@@ -1635,13 +1769,14 @@ void ShapesApp::BuildRenderItems()
 
 	// Base 3
 	auto boxRitem3 = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&boxRitem3->World, XMMatrixScaling(7.8f, 0.4f, 16.8f) * XMMatrixTranslation(-10.0f, 0.6f, 5.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem3->World, XMMatrixScaling(7.8f, 0.4f, 16.8f) * XMMatrixTranslation(-10.0f, 0.6f, 5.0f));
 	// Texture
-	XMStoreFloat4x4(&boxRitem3->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem3->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 	boxRitem3->ObjCBIndex = 2;
 	boxRitem3->Geo = mGeometries["shapeGeo"].get();
 	boxRitem3->Mat = mMaterials["three"].get();
 	boxRitem3->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	boxRitem3->Bounds = boxRitem3->Geo->DrawArgs["box"].Bounds;
 	boxRitem3->IndexCount = boxRitem3->Geo->DrawArgs["box"].IndexCount;
 	boxRitem3->StartIndexLocation = boxRitem3->Geo->DrawArgs["box"].StartIndexLocation;
 	boxRitem3->BaseVertexLocation = boxRitem3->Geo->DrawArgs["box"].BaseVertexLocation;
@@ -1660,13 +1795,14 @@ void ShapesApp::BuildRenderItems()
 		for (int j = 0; j < 17; j++)
 		{
 			rItem[i][j] = std::make_unique<RenderItem>();
-			XMStoreFloat4x4(&rItem[i][j]->World, XMMatrixScaling(0.5f, 1.0, 0.5f) * XMMatrixTranslation(-13.5 + i, 2.1f, -3.0f + j));
+			DirectX::XMStoreFloat4x4(&rItem[i][j]->World, XMMatrixScaling(0.5f, 1.0, 0.5f) * XMMatrixTranslation(-13.5f + i, 2.1f, -3.0f + j));
 			// Texture
-			XMStoreFloat4x4(&rItem[i][j]->TexTransform, brickTexTransform);
+			DirectX::XMStoreFloat4x4(&rItem[i][j]->TexTransform, brickTexTransform);
 			rItem[i][j]->ObjCBIndex = objCBIndex++;
 			rItem[i][j]->Geo = mGeometries["shapeGeo"].get();
 			rItem[i][j]->Mat = mMaterials["three"].get();
 			rItem[i][j]->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+			rItem[i][j]->Bounds = rItem[i][j]->Geo->DrawArgs["cylinder"].Bounds;
 			rItem[i][j]->IndexCount = rItem[i][j]->Geo->DrawArgs["cylinder"].IndexCount;
 			rItem[i][j]->StartIndexLocation = rItem[i][j]->Geo->DrawArgs["cylinder"].StartIndexLocation;
 			rItem[i][j]->BaseVertexLocation = rItem[i][j]->Geo->DrawArgs["cylinder"].BaseVertexLocation;
@@ -1678,13 +1814,14 @@ void ShapesApp::BuildRenderItems()
 
 	// Top Base 1
 	auto boxRitem4 = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&boxRitem4->World, XMMatrixScaling(8.0f, 0.4f, 16.8f) * XMMatrixTranslation(-10.0f, 3.8f, 5.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem4->World, XMMatrixScaling(8.0f, 0.4f, 16.8f) * XMMatrixTranslation(-10.0f, 3.8f, 5.0f));
 	// Texture
-	XMStoreFloat4x4(&boxRitem4->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem4->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 	boxRitem4->ObjCBIndex = 139;
 	boxRitem4->Geo = mGeometries["shapeGeo"].get();
 	boxRitem4->Mat = mMaterials["nine"].get();
 	boxRitem4->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	boxRitem4->Bounds = boxRitem4->Geo->DrawArgs["box"].Bounds;
 	boxRitem4->IndexCount = boxRitem4->Geo->DrawArgs["box"].IndexCount;
 	boxRitem4->StartIndexLocation = boxRitem4->Geo->DrawArgs["box"].StartIndexLocation;
 	boxRitem4->BaseVertexLocation = boxRitem4->Geo->DrawArgs["box"].BaseVertexLocation;
@@ -1694,13 +1831,14 @@ void ShapesApp::BuildRenderItems()
 
 	// Top Base 2 
 	auto boxRitem5 = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&boxRitem5->World, XMMatrixScaling(8.0f, 0.8f, 16.8f) * XMMatrixTranslation(-10.0f, 4.4f, 5.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem5->World, XMMatrixScaling(8.0f, 0.8f, 16.8f) * XMMatrixTranslation(-10.0f, 4.4f, 5.0f));
 	// Texture
-	XMStoreFloat4x4(&boxRitem5->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem5->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 	boxRitem5->ObjCBIndex = 140;
 	boxRitem5->Geo = mGeometries["shapeGeo"].get();
 	boxRitem5->Mat = mMaterials["seven"].get();
 	boxRitem5->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	boxRitem5->Bounds = boxRitem5->Geo->DrawArgs["box2"].Bounds;
 	boxRitem5->IndexCount = boxRitem5->Geo->DrawArgs["box2"].IndexCount;
 	boxRitem5->StartIndexLocation = boxRitem5->Geo->DrawArgs["box2"].StartIndexLocation;
 	boxRitem5->BaseVertexLocation = boxRitem5->Geo->DrawArgs["box2"].BaseVertexLocation;
@@ -1710,13 +1848,14 @@ void ShapesApp::BuildRenderItems()
 
 	// Top Base 3
 	auto boxRitem6 = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&boxRitem6->World, XMMatrixScaling(10.0f, 0.2f, 16.8f) * XMMatrixTranslation(-10.0f, 4.9f, 5.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem6->World, XMMatrixScaling(10.0f, 0.2f, 16.8f) * XMMatrixTranslation(-10.0f, 4.9f, 5.0f));
 	// Texture
-	XMStoreFloat4x4(&boxRitem6->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem6->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 	boxRitem6->ObjCBIndex = 141;
 	boxRitem6->Geo = mGeometries["shapeGeo"].get();
 	boxRitem6->Mat = mMaterials["seven"].get();
 	boxRitem6->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	boxRitem6->Bounds = boxRitem6->Geo->DrawArgs["box"].Bounds;
 	boxRitem6->IndexCount = boxRitem6->Geo->DrawArgs["box"].IndexCount;
 	boxRitem6->StartIndexLocation = boxRitem6->Geo->DrawArgs["box"].StartIndexLocation;
 	boxRitem6->BaseVertexLocation = boxRitem6->Geo->DrawArgs["box"].BaseVertexLocation;
@@ -1726,13 +1865,14 @@ void ShapesApp::BuildRenderItems()
 
 	// Top 45 deg rec 1
 	auto boxRitem7 = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&boxRitem7->World, XMMatrixScaling(4.2f, 1.3f, 16.5f) * XMMatrixRotationZ(XMConvertToRadians(20.0f)) * XMMatrixTranslation(-11.8f, 5.0f, 5.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem7->World, XMMatrixScaling(4.2f, 1.3f, 16.5f) * XMMatrixRotationZ(XMConvertToRadians(20.0f)) * XMMatrixTranslation(-11.8f, 5.0f, 5.0f));
 	// Texture
-	XMStoreFloat4x4(&boxRitem7->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem7->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 	boxRitem7->ObjCBIndex = 142;
 	boxRitem7->Geo = mGeometries["shapeGeo"].get();
 	boxRitem7->Mat = mMaterials["two"].get();
 	boxRitem7->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	boxRitem7->Bounds = boxRitem7->Geo->DrawArgs["box2"].Bounds;
 	boxRitem7->IndexCount = boxRitem7->Geo->DrawArgs["box2"].IndexCount;
 	boxRitem7->StartIndexLocation = boxRitem7->Geo->DrawArgs["box2"].StartIndexLocation;
 	boxRitem7->BaseVertexLocation = boxRitem7->Geo->DrawArgs["box2"].BaseVertexLocation;
@@ -1742,13 +1882,14 @@ void ShapesApp::BuildRenderItems()
 
 	// Top 5 deg rec 2
 	auto boxRitem8 = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&boxRitem8->World, XMMatrixScaling(4.2f, 1.3f, 16.5f) * XMMatrixRotationZ(XMConvertToRadians(-20.0f)) * XMMatrixTranslation(-8.5f, 5.0f, 5.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem8->World, XMMatrixScaling(4.2f, 1.3f, 16.5f) * XMMatrixRotationZ(XMConvertToRadians(-20.0f)) * XMMatrixTranslation(-8.5f, 5.0f, 5.0f));
 	// Texture
-	XMStoreFloat4x4(&boxRitem8->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem8->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 	boxRitem8->ObjCBIndex = 143;
 	boxRitem8->Geo = mGeometries["shapeGeo"].get();
 	boxRitem8->Mat = mMaterials["two"].get();
 	boxRitem8->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	boxRitem8->Bounds = boxRitem8->Geo->DrawArgs["box2"].Bounds;
 	boxRitem8->IndexCount = boxRitem8->Geo->DrawArgs["box2"].IndexCount;
 	boxRitem8->StartIndexLocation = boxRitem8->Geo->DrawArgs["box2"].StartIndexLocation;
 	boxRitem8->BaseVertexLocation = boxRitem8->Geo->DrawArgs["box2"].BaseVertexLocation;
@@ -1758,13 +1899,14 @@ void ShapesApp::BuildRenderItems()
 
 	// Top 3
 	auto boxRitem9 = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&boxRitem9->World, XMMatrixScaling(4.3f, 0.2f, 16.8f) * XMMatrixRotationZ(XMConvertToRadians(-20.0f)) * XMMatrixTranslation(-8.0f, 5.6f, 5.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem9->World, XMMatrixScaling(4.3f, 0.2f, 16.8f) * XMMatrixRotationZ(XMConvertToRadians(-20.0f)) * XMMatrixTranslation(-8.0f, 5.6f, 5.0f));
 	// Texture
-	XMStoreFloat4x4(&boxRitem9->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem9->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 	boxRitem9->ObjCBIndex = 144;
 	boxRitem9->Geo = mGeometries["shapeGeo"].get();
 	boxRitem9->Mat = mMaterials["four"].get();
 	boxRitem9->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	boxRitem9->Bounds = boxRitem9->Geo->DrawArgs["box"].Bounds;
 	boxRitem9->IndexCount = boxRitem9->Geo->DrawArgs["box"].IndexCount;
 	boxRitem9->StartIndexLocation = boxRitem9->Geo->DrawArgs["box"].StartIndexLocation;
 	boxRitem9->BaseVertexLocation = boxRitem9->Geo->DrawArgs["box"].BaseVertexLocation;
@@ -1773,13 +1915,14 @@ void ShapesApp::BuildRenderItems()
 
 	// Top 4
 	auto boxRitem10 = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&boxRitem10->World, XMMatrixScaling(4.3f, 0.2f, 16.8f) * XMMatrixRotationZ(XMConvertToRadians(20.0f)) * XMMatrixTranslation(-12.0f, 5.6f, 5.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem10->World, XMMatrixScaling(4.3f, 0.2f, 16.8f) * XMMatrixRotationZ(XMConvertToRadians(20.0f)) * XMMatrixTranslation(-12.0f, 5.6f, 5.0f));
 	// Texture
-	XMStoreFloat4x4(&boxRitem10->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem10->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 	boxRitem10->ObjCBIndex = 145;
 	boxRitem10->Geo = mGeometries["shapeGeo"].get();
 	boxRitem10->Mat = mMaterials["six"].get();
 	boxRitem10->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	boxRitem10->Bounds = boxRitem10->Geo->DrawArgs["box"].Bounds;
 	boxRitem10->IndexCount = boxRitem10->Geo->DrawArgs["box"].IndexCount;
 	boxRitem10->StartIndexLocation = boxRitem10->Geo->DrawArgs["box"].StartIndexLocation;
 	boxRitem10->BaseVertexLocation = boxRitem10->Geo->DrawArgs["box"].BaseVertexLocation;
@@ -1804,13 +1947,14 @@ void ShapesApp::BuildRenderItems()
 		for (int j = 0; j < 17; j++)
 		{
 			rItem2[i][j] = std::make_unique<RenderItem>();
-			XMStoreFloat4x4(&rItem2[i][j]->World, XMMatrixScaling(0.5f, 0.1f, 0.5f) * XMMatrixRotationZ(XMConvertToRadians(2.0f)) * XMMatrixTranslation(-11.0f + i, 9.5f, -3.0f + j) * rotationMatrix);
+			DirectX::XMStoreFloat4x4(&rItem2[i][j]->World, XMMatrixScaling(0.5f, 0.1f, 0.5f) * XMMatrixRotationZ(XMConvertToRadians(2.0f)) * XMMatrixTranslation(-11.0f + i, 9.5f, -3.0f + j) * rotationMatrix);
 			// Texture
-			XMStoreFloat4x4(&rItem2[i][j]->TexTransform, brickTex3Transform);
+			DirectX::XMStoreFloat4x4(&rItem2[i][j]->TexTransform, brickTex3Transform);
 			rItem2[i][j]->ObjCBIndex = objCBIndex2++;
 			rItem2[i][j]->Geo = mGeometries["shapeGeo"].get();
 			rItem2[i][j]->Mat = mMaterials["one"].get();
 			rItem2[i][j]->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+			rItem2[i][j]->Bounds = rItem2[i][j]->Geo->DrawArgs["cylinder2"].Bounds;
 			rItem2[i][j]->IndexCount = rItem2[i][j]->Geo->DrawArgs["cylinder2"].IndexCount;
 			rItem2[i][j]->StartIndexLocation = rItem2[i][j]->Geo->DrawArgs["cylinder2"].StartIndexLocation;
 			rItem2[i][j]->BaseVertexLocation = rItem2[i][j]->Geo->DrawArgs["cylinder2"].BaseVertexLocation;
@@ -1836,13 +1980,14 @@ void ShapesApp::BuildRenderItems()
 		for (int j = 0; j < 17; j++)
 		{
 			rItem3[i][j] = std::make_unique<RenderItem>();
-			XMStoreFloat4x4(&rItem3[i][j]->World, XMMatrixScaling(0.5f, 0.1f, 0.5f) * XMMatrixRotationZ(XMConvertToRadians(-2.0f)) * XMMatrixTranslation(-11.0f + i, 2.7f, -3.0f + j) * rotationMatrix2);
+			DirectX::XMStoreFloat4x4(&rItem3[i][j]->World, XMMatrixScaling(0.5f, 0.1f, 0.5f) * XMMatrixRotationZ(XMConvertToRadians(-2.0f)) * XMMatrixTranslation(-11.0f + i, 2.7f, -3.0f + j) * rotationMatrix2);
 			// Texture
-			XMStoreFloat4x4(&rItem3[i][j]->TexTransform, brickTex4Transform);
+			DirectX::XMStoreFloat4x4(&rItem3[i][j]->TexTransform, brickTex4Transform);
 			rItem3[i][j]->ObjCBIndex = objCBIndex3++;
 			rItem3[i][j]->Geo = mGeometries["shapeGeo"].get();
 			rItem3[i][j]->Mat = mMaterials["two"].get();
 			rItem3[i][j]->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+			rItem3[i][j]->Bounds = rItem3[i][j]->Geo->DrawArgs["cylinder2"].Bounds;
 			rItem3[i][j]->IndexCount = rItem3[i][j]->Geo->DrawArgs["cylinder2"].IndexCount;
 			rItem3[i][j]->StartIndexLocation = rItem3[i][j]->Geo->DrawArgs["cylinder2"].StartIndexLocation;
 			rItem3[i][j]->BaseVertexLocation = rItem3[i][j]->Geo->DrawArgs["cylinder2"].BaseVertexLocation;
@@ -1862,13 +2007,14 @@ void ShapesApp::BuildRenderItems()
 	XMMATRIX rotationMatrix3 = XMMatrixRotationAxis(rotationAxis3, XMConvertToRadians(rotationAngle3));
 
 	rItem4 = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&rItem4->World, XMMatrixScaling(0.0f, 0.0f, 0.0f) * XMMatrixRotationX(XMConvertToRadians(90.0f)) * XMMatrixTranslation(-12.5f, 0.0f, 6.0f) * rotationMatrix3);
+	DirectX::XMStoreFloat4x4(&rItem4->World, XMMatrixScaling(0.0f, 0.0f, 0.0f) * XMMatrixRotationX(XMConvertToRadians(90.0f)) * XMMatrixTranslation(-12.5f, 0.0f, 6.0f) * rotationMatrix3);
 	// Texture
-	XMStoreFloat4x4(&rItem4->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
+	DirectX::XMStoreFloat4x4(&rItem4->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 	rItem4->ObjCBIndex = objCBIndex4;
 	rItem4->Geo = mGeometries["shapeGeo"].get();
 	rItem4->Mat = mMaterials["one"].get();
 	rItem4->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	rItem4->Bounds = rItem4->Geo->DrawArgs["cylinder"].Bounds;
 	rItem4->IndexCount = rItem4->Geo->DrawArgs["cylinder"].IndexCount;
 	rItem4->StartIndexLocation = rItem4->Geo->DrawArgs["cylinder"].StartIndexLocation;
 	rItem4->BaseVertexLocation = rItem4->Geo->DrawArgs["cylinder"].BaseVertexLocation;
@@ -1892,13 +2038,14 @@ void ShapesApp::BuildRenderItems()
 
 	//Trees base
 	auto boxRitem12 = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&boxRitem12->World, XMMatrixScaling(0.0f, 0.0f, 0.0f) * XMMatrixTranslation(-10.0f, 0.0f, -10.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem12->World, XMMatrixScaling(0.0f, 0.0f, 0.0f) * XMMatrixTranslation(-10.0f, 0.0f, -10.0f));
 	// Texture
-	XMStoreFloat4x4(&boxRitem12->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
+	DirectX::XMStoreFloat4x4(&boxRitem12->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 	boxRitem12->ObjCBIndex = 284;
 	boxRitem12->Geo = mGeometries["shapeGeo"].get();
 	boxRitem12->Mat = mMaterials["three"].get();
 	boxRitem12->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	boxRitem12->Bounds = boxRitem12->Geo->DrawArgs["box"].Bounds;
 	boxRitem12->IndexCount = boxRitem12->Geo->DrawArgs["box"].IndexCount;
 	boxRitem12->StartIndexLocation = boxRitem12->Geo->DrawArgs["box"].StartIndexLocation;
 	boxRitem12->BaseVertexLocation = boxRitem12->Geo->DrawArgs["box"].BaseVertexLocation;
@@ -1908,13 +2055,14 @@ void ShapesApp::BuildRenderItems()
 	// L forward Pillar 
 	std::unique_ptr<RenderItem> rItem5;
 	rItem5 = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&rItem5->World, XMMatrixScaling(2.5f, 4.0f, 2.5f) * XMMatrixTranslation(-21.0f, 5.5f, -10.0f));
+	DirectX::XMStoreFloat4x4(&rItem5->World, XMMatrixScaling(2.5f, 4.0f, 2.5f) * XMMatrixTranslation(-21.0f, 5.5f, -10.0f));
 	// Texture
-	XMStoreFloat4x4(&rItem5->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
+	DirectX::XMStoreFloat4x4(&rItem5->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 	rItem5->ObjCBIndex = 285;
 	rItem5->Geo = mGeometries["shapeGeo"].get();
 	rItem5->Mat = mMaterials["nine"].get();
 	rItem5->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	rItem5->Bounds = rItem5->Geo->DrawArgs["cylinder"].Bounds;
 	rItem5->IndexCount = rItem5->Geo->DrawArgs["cylinder"].IndexCount;
 	rItem5->StartIndexLocation = rItem5->Geo->DrawArgs["cylinder"].StartIndexLocation;
 	rItem5->BaseVertexLocation = rItem5->Geo->DrawArgs["cylinder"].BaseVertexLocation;
@@ -1924,13 +2072,14 @@ void ShapesApp::BuildRenderItems()
 	// R forward Pillar
 	std::unique_ptr<RenderItem> rItem6;
 	rItem6 = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&rItem6->World, XMMatrixScaling(2.5f, 4.0f, 2.5f) * XMMatrixTranslation(1.0f, 5.5f, -10.0f));
+	DirectX::XMStoreFloat4x4(&rItem6->World, XMMatrixScaling(2.5f, 4.0f, 2.5f) * XMMatrixTranslation(1.0f, 5.5f, -10.0f));
 	// Texture
-	XMStoreFloat4x4(&rItem6->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
+	DirectX::XMStoreFloat4x4(&rItem6->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 	rItem6->ObjCBIndex = 286;
 	rItem6->Geo = mGeometries["shapeGeo"].get();
 	rItem6->Mat = mMaterials["nine"].get();
 	rItem6->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	rItem6->Bounds = rItem6->Geo->DrawArgs["cylinder"].Bounds;
 	rItem6->IndexCount = rItem6->Geo->DrawArgs["cylinder"].IndexCount;
 	rItem6->StartIndexLocation = rItem6->Geo->DrawArgs["cylinder"].StartIndexLocation;
 	rItem6->BaseVertexLocation = rItem6->Geo->DrawArgs["cylinder"].BaseVertexLocation;
@@ -1940,13 +2089,14 @@ void ShapesApp::BuildRenderItems()
 	// L Back Pillar
 	std::unique_ptr<RenderItem> rItem7;
 	rItem7 = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&rItem7->World, XMMatrixScaling(2.5f, 4.0f, 2.5f) * XMMatrixTranslation(-21.0f, 5.5f, 18.0f));
+	DirectX::XMStoreFloat4x4(&rItem7->World, XMMatrixScaling(2.5f, 4.0f, 2.5f) * XMMatrixTranslation(-21.0f, 5.5f, 18.0f));
 	// Texture
-	XMStoreFloat4x4(&rItem7->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
+	DirectX::XMStoreFloat4x4(&rItem7->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 	rItem7->ObjCBIndex = 287;
 	rItem7->Geo = mGeometries["shapeGeo"].get();
 	rItem7->Mat = mMaterials["nine"].get();
 	rItem7->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	rItem7->Bounds = rItem7->Geo->DrawArgs["cylinder"].Bounds;
 	rItem7->IndexCount = rItem7->Geo->DrawArgs["cylinder"].IndexCount;
 	rItem7->StartIndexLocation = rItem7->Geo->DrawArgs["cylinder"].StartIndexLocation;
 	rItem7->BaseVertexLocation = rItem7->Geo->DrawArgs["cylinder"].BaseVertexLocation;
@@ -1956,13 +2106,14 @@ void ShapesApp::BuildRenderItems()
 	// R Back Pillar
 	std::unique_ptr<RenderItem> rItem8;
 	rItem8 = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&rItem8->World, XMMatrixScaling(2.5f, 4.0f, 2.5f) * XMMatrixTranslation(1.0f, 5.5f, 18.0f));
+	DirectX::XMStoreFloat4x4(&rItem8->World, XMMatrixScaling(2.5f, 4.0f, 2.5f) * XMMatrixTranslation(1.0f, 5.5f, 18.0f));
 	// Texture
-	XMStoreFloat4x4(&rItem8->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
+	DirectX::XMStoreFloat4x4(&rItem8->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
 	rItem8->ObjCBIndex = 288;
 	rItem8->Geo = mGeometries["shapeGeo"].get();
 	rItem8->Mat = mMaterials["nine"].get();
 	rItem8->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	rItem8->Bounds = rItem8->Geo->DrawArgs["cylinder"].Bounds;
 	rItem8->IndexCount = rItem8->Geo->DrawArgs["cylinder"].IndexCount;
 	rItem8->StartIndexLocation = rItem8->Geo->DrawArgs["cylinder"].StartIndexLocation;
 	rItem8->BaseVertexLocation = rItem8->Geo->DrawArgs["cylinder"].BaseVertexLocation;
@@ -1974,7 +2125,7 @@ void ShapesApp::BuildRenderItems()
 	// Water nw
 	auto wavesRitem = std::make_unique<RenderItem>();
 	wavesRitem->World = MathHelper::Identity4x4();
-	XMStoreFloat4x4(&wavesRitem->TexTransform, XMMatrixScaling(5.0f, 7.0f, 1.0f));
+	DirectX::XMStoreFloat4x4(&wavesRitem->TexTransform, XMMatrixScaling(5.0f, 7.0f, 1.0f));
 	wavesRitem->ObjCBIndex = 289;
 	wavesRitem->Mat = mMaterials["eight"].get();
 	wavesRitem->Geo = mGeometries["waterGeo"].get();
@@ -2001,7 +2152,7 @@ void ShapesApp::BuildRenderItems()
 	//mAllRitems.push_back(std::move(gridRitem));
 
 	objCBIndex = 290; //1
-	CreateItem("box2", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(85.0f, 4.25f, -95.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
+	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(85.0f, 4.25f, -95.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
 	objCBIndex++; //1
 	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(75.0f, 4.25f, -95.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
 	objCBIndex++; //2
@@ -2214,7 +2365,26 @@ void ShapesApp::BuildRenderItems()
 	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(25.0f, 4.25f, 15.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
 	objCBIndex++; //105
 	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(15.0f, 4.25f, 15.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
-	objCBIndex++; //106
+	//objCBIndex++; //106
+
+	auto pickedRitem = std::make_unique<RenderItem>();
+	pickedRitem->World = MathHelper::Identity4x4();
+	pickedRitem->TexTransform = MathHelper::Identity4x4();
+	pickedRitem->ObjCBIndex = objCBIndex++;
+	pickedRitem->Mat = mMaterials["one"].get();
+	pickedRitem->Geo = mGeometries["shapeGeo"].get();
+	pickedRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+
+	// Picked triangle is not visible until one is picked.
+	pickedRitem->Visible = false;
+
+	// DrawCall parameters are filled out when a triangle is picked.
+	pickedRitem->IndexCount = 0;
+	pickedRitem->StartIndexLocation = 0;
+	pickedRitem->BaseVertexLocation = 0;
+	mPickedRitem = pickedRitem.get();
+	mRitemLayer[(int)RenderLayer::Highlight].push_back(pickedRitem.get());
+	mAllRitems.push_back(std::move(pickedRitem));
 
 	// All the render items are opaque.
 	// Tree Step28
@@ -2326,9 +2496,124 @@ XMFLOAT3 ShapesApp::GetHillsNormal(float x, float z)const
 		1.0f,
 		-0.3f * sinf(0.1f * x) + 0.03f * x * sinf(0.1f * z));
 
-	XMVECTOR unitNormal = XMVector3Normalize(XMLoadFloat3(&n));
-	XMStoreFloat3(&n, unitNormal);
+	XMVECTOR unitNormal = XMVector3Normalize(DirectX::XMLoadFloat3(&n));
+	DirectX::XMStoreFloat3(&n, unitNormal);
 
 	return n;
+}
+
+void ShapesApp::MazeCollision(int sx, int sy)
+{
+	XMFLOAT4X4 P = mCamera.GetProj4x4f();   ////XMMatrixPerspectiveFovLH(mFovY, mAspect, mNearZ, mFarZ);
+
+
+	// Compute picking ray in view space.
+	//we can shoot our picking ray through the point (v'x, v'y, 1) instead. Note that this yields the same picking ray as the one shot through the point (xv, yv, d) on the projection window.
+
+	float vx = (+2.0f * sx / mClientWidth - 1.0f) / P(0, 0);
+	float vy = (-2.0f * sy / mClientHeight + 1.0f) / P(1, 1);
+
+	// Ray definition in view space.
+	XMVECTOR rayOrigin = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
+	XMVECTOR rayDir = XMVectorSet(vx, vy, 1.0f, 0.0f);
+
+	XMMATRIX V = mCamera.GetView();
+	XMMATRIX invView = XMMatrixInverse(&XMMatrixDeterminant(V), V);
+
+	//Generally, each object in the scene has its own local space. Therefore, the ray must be transformed to the local space of each scene object to do the intersection test.
+	//The following code shows how the picking ray is transformed from view space to the local space of an object :
+
+
+	// Assume nothing is picked to start, so the picked render-item is invisible.
+	mPickedRitem->Visible = false;
+
+	// Check if we picked an opaque render item.  A real app might keep a separate "picking list"
+	// of objects that can be selected.   
+	for (auto ri : mRitemLayer[(int)RenderLayer::Opaque])
+	{
+		auto geo = ri->Geo;
+
+		// Skip invisible render-items.
+		if (ri->Visible == false)
+			continue;
+
+		XMMATRIX W = DirectX::XMLoadFloat4x4(&ri->World);
+
+		//If W is the world matrix of an object, the matrix W?1 transforms geometry from world space to the local space of the object.
+		XMMATRIX invWorld = XMMatrixInverse(&XMMatrixDeterminant(W), W);
+
+		//Because the view matrix transforms geometry from world space to view space, the inverse of the view matrix transforms geometry from view space to world space. 
+		XMMATRIX toLocal = XMMatrixMultiply(invView, invWorld);
+
+		//Generally, each object in the scene has its own local space. Therefore, the ray must be transformed to the local space of each scene object to do the intersection test.
+		rayOrigin = XMVector3TransformCoord(rayOrigin, toLocal);
+		rayDir = XMVector3TransformNormal(rayDir, toLocal);
+
+		// Make the ray direction unit length for the intersection tests.
+		rayDir = XMVector3Normalize(rayDir);
+
+		// If we hit the bounding box of the Mesh, then we might have picked a Mesh triangle,
+		// so do the ray/triangle tests.
+		//
+		// If we did not hit the bounding box, then it is impossible that we hit 
+		// the Mesh, so do not waste effort doing ray/triangle tests.
+		float tmin = 0.0f;
+		if (ri->Bounds.Intersects(rayOrigin, rayDir, tmin))
+		{
+			// NOTE: For the demo, we know what to cast the vertex/index data to.  If we were mixing
+			// formats, some metadata would be needed to figure out what to cast it to.
+			auto vertices = static_cast<Vertex*>(geo->VertexBufferCPU->GetBufferPointer());
+			auto indices = static_cast<std::uint32_t*>(geo->IndexBufferCPU->GetBufferPointer());
+			UINT triCount = ri->IndexCount / 3;
+
+			// Find the nearest ray/triangle intersection.
+			tmin = MathHelper::Infinity;
+			for (UINT i = 0; i < triCount; ++i)
+			{
+				// Indices for this triangle.
+				UINT i0 = indices[i * 3 + 0];
+				UINT i1 = indices[i * 3 + 1];
+				UINT i2 = indices[i * 3 + 2];
+
+
+				//TODO: figure out why it breaks here
+				// Vertices for this triangle.
+				XMVECTOR v0 = DirectX::XMLoadFloat3(&vertices[i0].Pos);
+				XMVECTOR v1 = DirectX::XMLoadFloat3(&vertices[i1].Pos);
+				XMVECTOR v2 = DirectX::XMLoadFloat3(&vertices[i2].Pos);
+
+				// We have to iterate over all the triangles in order to find the nearest intersection.
+				float t = 0.0f;
+				if (TriangleTests::Intersects(rayOrigin, rayDir, v0, v1, v2, t))
+				{
+					if (t < tmin)
+					{
+						// This is the new nearest picked triangle.
+						tmin = t;
+						UINT pickedTriangle = i;
+
+						mPickedRitem->Visible = true;
+						mPickedRitem->IndexCount = 3;
+						mPickedRitem->BaseVertexLocation = 0;
+
+						// Picked render item needs same world matrix as object picked.
+						mPickedRitem->World = ri->World;
+						mPickedRitem->NumFramesDirty = gNumFrameResources;
+
+						// Offset to the picked triangle in the mesh index buffer.
+						mPickedRitem->StartIndexLocation = 3 * pickedTriangle;
+					}
+				}
+			}
+		}
+		if (tmin <= 2.0f)
+		{
+			bStopForwardMovement = true;
+		}
+		else if (tmin >= 2.0f)
+		{
+			bStopForwardMovement = false;
+		}
+	}
 }
 
