@@ -77,10 +77,10 @@ public:
 private:
 
 	// Camera coordinate system with coordinates relative to world space.
-	DirectX::XMFLOAT3 mPosition = { 100.0f, 10.0f, -95.0f };
+	DirectX::XMFLOAT3 mPosition = { 38.0f, 80.0f, -168.0f };
 	DirectX::XMFLOAT3 mRight = { 1.0f, 0.0f, 0.0f };
 	DirectX::XMFLOAT3 mUp = { 0.0f, 1.0f, 0.0f };
-	DirectX::XMFLOAT3 mLook = { 0.0f, 0.0f, 1.0f };
+	DirectX::XMFLOAT3 mLook = { 0.0f, -1.0f, 1.4f };
 
 	// Cache frustum properties.
 	float mNearZ = 0.0f;
