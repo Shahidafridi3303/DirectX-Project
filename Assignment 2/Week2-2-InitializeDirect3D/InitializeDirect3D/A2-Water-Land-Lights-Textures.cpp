@@ -614,20 +614,6 @@ void ShapesApp::UpdateMainPassCB(const GameTimer& gt)
 	mMainPassCB.Lights[9].SpotPower = 6.0f;
 	mMainPassCB.Lights[9].Direction = { -1.0f, 0.0f, 0.0f };
 
-
-
-	// Top down back
-	mMainPassCB.Lights[10].Position = { 35.0f, 4.5f, -91.0f };
-	mMainPassCB.Lights[10].Strength = { 0.0f, 55.0f, 0.0f };
-	mMainPassCB.Lights[10].SpotPower = 35.0f;
-	mMainPassCB.Lights[10].Direction = { 0.0f, 0.0f, 1.0f };
-
-	// Top down back
-	mMainPassCB.Lights[11].Position = { 45.0f, 4.5f, -91.0f };
-	mMainPassCB.Lights[11].Strength = { 8.5f, 2.8f, 9.4f };
-	mMainPassCB.Lights[11].SpotPower = 35.0f;
-	mMainPassCB.Lights[11].Direction = { 0.0f, 0.0f, 1.0f };
-
 	auto currPassCB = mCurrFrameResource->PassCB.get();
 	currPassCB->CopyData(0, mMainPassCB);
 }
@@ -957,7 +943,7 @@ void ShapesApp::BuildShadersAndInputLayout()
 void ShapesApp::BuildLandGeometry()
 {
 	GeometryGenerator geoGen;
-	GeometryGenerator::MeshData grid = geoGen.CreateGrid(160.0f, 160.0f, 50, 50);
+	GeometryGenerator::MeshData grid = geoGen.CreateGrid(100.0f, 160.0f, 50, 50);
 
 	//
 	// Extract the vertex elements we are interested and apply the height function to
@@ -1982,7 +1968,6 @@ void ShapesApp::BuildRenderItems()
 	mAllRitems.push_back(std::move(rItem8));
 
 
-
 	// Water nw
 	auto wavesRitem = std::make_unique<RenderItem>();
 	wavesRitem->World = MathHelper::Identity4x4();
@@ -1998,21 +1983,21 @@ void ShapesApp::BuildRenderItems()
 	mRitemLayer[(int)RenderLayer::Transparent].push_back(wavesRitem.get());
 	mAllRitems.push_back(std::move(wavesRitem));
 
-	//// land
-	//auto gridRitem = std::make_unique<RenderItem>();
-	//gridRitem->World = MathHelper::Identity4x4();
-	//XMStoreFloat4x4(&gridRitem->TexTransform, XMMatrixScaling(5.0f, 7.0f, 7.0f));
-	//gridRitem->ObjCBIndex = 290;
-	//gridRitem->Mat = mMaterials["three"].get();
-	//gridRitem->Geo = mGeometries["landGeo"].get();
-	//gridRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	//gridRitem->IndexCount = gridRitem->Geo->DrawArgs["grid"].IndexCount;
-	//gridRitem->StartIndexLocation = gridRitem->Geo->DrawArgs["grid"].StartIndexLocation;
-	//gridRitem->BaseVertexLocation = gridRitem->Geo->DrawArgs["grid"].BaseVertexLocation;
-	//mRitemLayer[(int)RenderLayer::Opaque].push_back(gridRitem.get());
-	//mAllRitems.push_back(std::move(gridRitem));
+	// land
+	auto gridRitem = std::make_unique<RenderItem>();
+	gridRitem->World = MathHelper::Identity4x4();
+	XMStoreFloat4x4(&gridRitem->TexTransform, XMMatrixScaling(5.0f, 7.0f, 7.0f) * XMMatrixTranslation(10.0f, 4.25f, -95.0f));
+	gridRitem->ObjCBIndex = 290;
+	gridRitem->Mat = mMaterials["three"].get();
+	gridRitem->Geo = mGeometries["landGeo"].get();
+	gridRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	gridRitem->IndexCount = gridRitem->Geo->DrawArgs["grid"].IndexCount;
+	gridRitem->StartIndexLocation = gridRitem->Geo->DrawArgs["grid"].StartIndexLocation;
+	gridRitem->BaseVertexLocation = gridRitem->Geo->DrawArgs["grid"].BaseVertexLocation;
+	mRitemLayer[(int)RenderLayer::Opaque].push_back(gridRitem.get());
+	mAllRitems.push_back(std::move(gridRitem));
 
-	objCBIndex = 290; //1
+	objCBIndex = 291; //1
 	CreateItem("box2", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(85.0f, 4.25f, -95.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
 	objCBIndex++; //1
 	CreateItem("box", XMMatrixScaling(10.0f, 8.0f, 1.0f), XMMatrixTranslation(75.0f, 4.25f, -95.0f), XMMatrixRotationRollPitchYaw(0.f, 0.f, 0.f), objCBIndex, "four");//front left wall
